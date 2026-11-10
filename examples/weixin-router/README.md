@@ -31,4 +31,4 @@ The example reads one JSON object from stdin and writes one JSON value to stdout
 - Archived Sessions are excluded. Classification failures keep the current Session; search or recall failures start a new Session.
 - `/new`, `/go`, `/prev` and `/next` are manual navigation and skip automatic routing for the next message.
 
-Manual development against a simulated Weixin service lives in the separate [`sim-weixin`](../../../../sim-weixin) repository and the DSH access point in [`examples/sim-weixin`](../sim-weixin/README.md). The simulator is not bundled here.
+Manual development against a simulated Weixin service lives in the separate `dsh-sim-weixin` repository and the DSH access point in [`examples/sim-weixin`](../sim-weixin/README.md). The simulator is not bundled here.

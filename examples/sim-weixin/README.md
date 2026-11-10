@@ -1,7 +1,7 @@
 # Simulated Weixin access point
 
 This example is the DSH-side access point for the standalone
-[`dsh-sim-weixin`](../../../../sim-weixin) repository. It does not start or embed
+`dsh-sim-weixin` repository. It does not start or embed
 the simulator: run that repository separately, then point this plugin at its
 address.
 
@@ -43,8 +43,8 @@ never posts a route/switch event or a custom delivery event; the simulator sees
 only `getupdates`, `getconfig`, `sendtyping`, `sendmessage`, `notifystart` and
 `notifystop`.
 
-The communication contract is documented in
-[`sim-weixin/PROTOCOL.md`](../../../../sim-weixin/PROTOCOL.md).
+The communication contract is documented in the simulator repository's
+`PROTOCOL.md` and summarized in [`docs/sim-weixin.md`](../../docs/sim-weixin.md).
 
 `simulatorBaseUrl` and `token` can also come from `DSH_SIM_WEIXIN_URL` and
 `DSH_SIM_WEIXIN_TOKEN`.

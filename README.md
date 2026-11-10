@@ -5,7 +5,7 @@
 - 仓库：<https://github.com/Pr1Stu/dsh-better-wechat>
 - npm 包：`@xmanrui/dsh-im`
 - 支持渠道：微信私聊（唯一正式 IM 渠道）
-- 模拟接入点：独立的 [`sim-weixin`](../../sim-weixin) 仓库
+- 模拟接入点：独立的 `sim-weixin` 仓库
 
 > 飞书、钉钉、QQ、企业微信、Slack、Telegram、Discord、WhatsApp、iMessage、Matrix、邮箱和 AI Office 均不属于当前版本的支持范围；相关代码和测试已从本仓库移除。
 
@@ -91,7 +91,7 @@ DSH 侧的接入示例是 [`examples/sim-weixin/manual-host.mjs`](examples/sim-w
 - 只允许标准 iLink 端点：`getupdates`、`getconfig`、`sendtyping`、`sendmessage`、`msg/notifystart`、`msg/notifystop`。
 - 禁止 `/route`、`/switch` 等自定义端点，也禁止在 `sendmessage` 中加入路由字段。
 - 切换会话提示只能作为普通文本消息发送。
-- 完整规范见模拟器仓库的 [`PROTOCOL.md`](../../sim-weixin/PROTOCOL.md) 和[接入说明](docs/sim-weixin.md)。
+- 完整规范见模拟器仓库的 `PROTOCOL.md` 和[接入说明](docs/sim-weixin.md)。
 
 ## 常用命令
 

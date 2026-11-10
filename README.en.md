@@ -5,7 +5,7 @@
 - Repository: <https://github.com/Pr1Stu/dsh-better-wechat>
 - npm package: `@xmanrui/dsh-im`
 - Supported channel: WeChat direct messages (the only shipped IM adapter)
-- Simulator: the separate [`sim-weixin`](../../sim-weixin) repository
+- Simulator: the separate `sim-weixin` repository
 
 > Feishu, DingTalk, QQ, WeCom, Slack, Telegram, Discord, WhatsApp, iMessage, Matrix, email and AI Office are not supported by this checkout. Their code and tests have been removed.
 
@@ -91,7 +91,7 @@ Protocol rules:
 - Only the standard iLink endpoints are allowed: `getupdates`, `getconfig`, `sendtyping`, `sendmessage`, `msg/notifystart`, `msg/notifystop`.
 - Custom endpoints such as `/route` or `/switch`, and routing fields in `sendmessage`, are rejected.
 - Conversation-switch notices may only be sent as ordinary text messages.
-- See the simulator's [`PROTOCOL.md`](../../sim-weixin/PROTOCOL.md) and the [access-point guide](docs/sim-weixin.md).
+- See the simulator's `PROTOCOL.md` and the [access-point guide](docs/sim-weixin.md).
 
 ## Commands
 

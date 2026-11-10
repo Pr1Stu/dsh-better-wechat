@@ -27,7 +27,8 @@ The simulator accepts only these standard iLink bot endpoints:
 
 Every request uses `Authorization: Bearer <token>` and a JSON body. The full
 request/response schema is documented in the simulator repository's
-`PROTOCOL.md` (sibling checkout: [`../../../sim-weixin/PROTOCOL.md`](../../../sim-weixin/PROTOCOL.md)).
+`PROTOCOL.md` in the simulator repository (sibling checkout path:
+`sim-weixin/PROTOCOL.md`).
 
 ## Conversation-switch notices use standard messages
 
