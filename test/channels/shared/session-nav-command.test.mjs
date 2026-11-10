@@ -483,23 +483,13 @@ test('/tail file export fences arbitrary Markdown bodies byte-for-byte', async (
 });
 
 
-test('capability matrix: buttons and file send are declared per channel', () => {
-  assert.deepEqual(channelCapabilities('telegram'), { buttons: true, fileSend: true });
-  assert.deepEqual(channelCapabilities('slack'), { buttons: false, fileSend: true });
-  assert.deepEqual(channelCapabilities('discord'), { buttons: false, fileSend: true });
-  assert.deepEqual(channelCapabilities('feishu'), { buttons: false, fileSend: false });
-  assert.deepEqual(channelCapabilities('dingtalk'), { buttons: false, fileSend: false });
-  assert.deepEqual(channelCapabilities('whatsapp'), { buttons: false, fileSend: false });
-  assert.deepEqual(channelCapabilities('matrix'), { buttons: false, fileSend: false });
+test('Weixin does not declare button or file-send capabilities', () => {
+  assert.deepEqual(channelCapabilities('weixin'), { buttons: false, fileSend: false });
 });
 
 test('capability matrix: unsupported channels never send buttons or files', () => {
-  assert.equal(documentSendSupported('slack', { sendFile() {} }), true);
-  assert.equal(documentSendSupported('whatsapp', { sendFile() {} }), false, 'no file where unsupported');
-  assert.equal(documentSendSupported('telegram', {}), false, 'no file without a send method');
-  assert.equal(buttonPreviewSupported('telegram', { sendInteractionCard() {} }), true);
-  assert.equal(buttonPreviewSupported('telegram', {}), false, 'no button without a card method');
-  assert.equal(buttonPreviewSupported('discord', { sendInteractionCard() {} }), false, 'no button where unsupported');
+  assert.equal(documentSendSupported('weixin', { sendFile() {} }), false);
+  assert.equal(buttonPreviewSupported('weixin', { sendInteractionCard() {} }), false);
 });
 
 test('runSessionNavTextCommand returns text and degrades a file export honestly', async () => {
@@ -516,6 +506,18 @@ test('runSessionNavTextCommand returns text and degrades a file export honestly'
   const exported = await runSessionNavTextCommand('/tail 1 file', f.harness, f.state, f.key);
   assert.match(exported.message, /不支持发送文件/u);
   assert.equal(exported.messages.length, 1);
+});
+
+test('text navigation marks successful /prev switches for the Weixin router guard', async () => {
+  const f = await createFixture();
+  f.addSession('s1', { title: 'earlier' });
+  f.addSession('s2', { title: 'current' });
+  await f.bind('s1');
+  await f.bind('s2');
+
+  const result = await runSessionNavTextCommand('/prev', f.harness, f.state, f.key);
+  assert.equal(result.switched, true);
+  assert.equal(f.state.sessionFor(f.key), 's1');
 });
 
 test('/ls marks archived entries with ✕ like deleted ones', async () => {

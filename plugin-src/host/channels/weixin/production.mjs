@@ -1,3 +1,6 @@
+import { jevKeyPath } from './jev-key.mjs';
+import { createRouterSettingsStore } from './router-settings.mjs';
+import { createWeixinSessionRouter } from './session-router.mjs';
 import { getImageInputSettingsStore } from '../../../../src/channels/shared/image-input-settings-store.mjs';
 import { unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -100,6 +103,10 @@ export async function createProductionController(ctx, config = {}, internals = {
   const diagnostics = internals.diagnostics ?? createWeixinDiagnostics({ logger });
   const agentPresetCatalog = () => listAgentPresetCatalog(ctx);
   const paths = pluginPaths(config);
+  const routerSettings = internals.routerSettings ?? createRouterSettingsStore(config, {
+    enabled: Boolean(config.sessionRouter?.classifyEntry),
+  });
+  if (!internals.routerSettings) await routerSettings.load();
   const configStore = await new ConfigStore(paths.config).load();
   const { defaultWorkspace, ungroupedWorkspace } = await prepareBotWorkspace(config);
   const WorkspaceStore = internals.WorkspaceStore ?? BotWorkspaceStore;
@@ -190,6 +197,8 @@ export async function createProductionController(ctx, config = {}, internals = {
         token,
         harness: workspaceScope.harness,
         state: workspaceScope.state,
+        sessionRouter: createWeixinSessionRouter(ctx, config.sessionRouter && { ...config.sessionRouter, jevKeyFile: jevKeyPath(config) },
+          join(paths.root, 'session-router', encodeURIComponent(botId) + '.jsonl'), workspaceScope.harness, routerSettings),
         contextEnhancement: { botId, getSettings: () => workspaces.contextEnhancementFor(botId) },
         accessPolicy: accessPolicyProvider(workspaces, botId, {
           channel: 'weixin', config: accountConfig,

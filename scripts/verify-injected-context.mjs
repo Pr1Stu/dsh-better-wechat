@@ -22,7 +22,7 @@ assert.equal(SESSION_FORMAT_VERSION, 4, 'This regression verifies Session format
 
 const directory = await mkdtemp(join(tmpdir(), 'dsh-im-context-'));
 const ctx = new Context();
-const source = { channel: 'feishu', senderName: 'Context test' };
+const source = { channel: 'weixin', senderName: 'Context test' };
 const guidance = 'Reply briefly.';
 const reply = `${INJECTED_CONTEXT_TAGS.replyOpen}${JSON.stringify({
   authorName: 'Quoted author', content: 'Quoted text',
@@ -82,7 +82,7 @@ try {
     const message = {
       id: `${id}-user`, role: 'user',
       content: typeof content === 'string' ? [{ type: 'text', text: content }] : content,
-      source: { kind: 'user', rpcId: `feishu-${id}` },
+      source: { kind: 'user', rpcId: `weixin-${id}` },
     };
     const decision = { kind: 'enter', messages: [message] };
     const result = await ctx.waterfall('agent/pre-step', { agent: { session: { id } } },

@@ -77,8 +77,8 @@ test('failed configuration reads still allow forced modes and retain retry after
   for (const mode of ['show', 'hide']) await t.test(mode, async (t) => {
     const dshHome = await mkdtemp(join(tmpdir(), 'dsh-sidebar-ui-'));
     t.after(() => rm(dshHome, { recursive: true, force: true }));
-    await mkdir(join(dshHome, 'integrations/dsh-qq'), { recursive: true });
-    await writeFile(join(dshHome, 'integrations/dsh-qq/config.json'), '{broken');
+    await mkdir(join(dshHome, 'integrations/dsh-weixin'), { recursive: true });
+    await writeFile(join(dshHome, 'integrations/dsh-weixin/config.json'), '{broken');
     const handler = createSidebarSettingsRpcHandler({ config: { dshHome } });
     let pending;
     const rpcCall = (...args) => (pending = handler(...args));

@@ -1,18 +1,5 @@
 import { installGroupHistoryTools } from '../../src/channels/shared/group-history-access.mjs';
-import { apply as applyDingtalk } from './channels/dingtalk/index.mjs';
-import { apply as applyDiscord } from './channels/discord/index.mjs';
-import { apply as applyOffice } from './channels/office/index.mjs';
-import { apply as applyFeishu } from './channels/feishu/index.mjs';
-import { apply as applyQq } from './channels/qq/index.mjs';
-import { apply as applySlack } from './channels/slack/index.mjs';
-import { apply as applyTelegram } from './channels/telegram/index.mjs';
-import { apply as applyWecom } from './channels/wecom/index.mjs';
-import { apply as applyWecomApp } from './channels/wecom-app/index.mjs';
 import { apply as applyWeixin } from './channels/weixin/index.mjs';
-import { apply as applyWhatsapp } from './channels/whatsapp/index.mjs';
-import { apply as applyIMessage } from './channels/imessage/index.mjs';
-import { apply as applyEmail } from './channels/email/index.mjs';
-import { apply as applyMatrix } from './channels/matrix/index.mjs';
 import { installOutboundArtifactTool } from '../../src/channels/shared/semantic/artifact.mjs';
 import { installHostLanguage } from './host-language.mjs';
 import { installHostLanguageRpc } from './host-language-rpc.mjs';
@@ -37,7 +24,10 @@ export const inject = [
   'connection',
   'credentials',
   'typertGateway',
+  'sessionQuery',
+  'llm',
 ];
+export const provide = ['dshIm'];
 
 function channelConfig(config, name, deliveryService) {
   const channel = {
@@ -48,7 +38,7 @@ function channelConfig(config, name, deliveryService) {
   const withAuthority = config.rpcAuthority === undefined
     ? channel
     : { ...channel, rpcAuthority: config.rpcAuthority };
-  return name === 'office' ? withAuthority : { ...withAuthority, deliveryService };
+  return { ...withAuthority, deliveryService };
 }
 
 export function createImHostPlugin(internals = {}) {
@@ -64,51 +54,22 @@ export function createImHostPlugin(internals = {}) {
   const startSessionSync = internals.installSessionSyncCoordinator
     ?? installSessionSyncCoordinator;
   const makeDeliveryService = internals.createDeliveryService ?? createDeliveryService;
-  const startFeishu = internals.applyFeishu ?? applyFeishu;
   const startWeixin = internals.applyWeixin ?? applyWeixin;
-  const startDingtalk = internals.applyDingtalk ?? applyDingtalk;
-  const startWecom = internals.applyWecom ?? applyWecom;
-  const startWecomApp = internals.applyWecomApp ?? applyWecomApp;
-  const startQq = internals.applyQq ?? applyQq;
-  const startSlack = internals.applySlack ?? applySlack;
-  const startTelegram = internals.applyTelegram ?? applyTelegram;
-  const startDiscord = internals.applyDiscord ?? applyDiscord;
-  const startOffice = internals.applyOffice ?? applyOffice;
-  const startWhatsapp = internals.applyWhatsapp ?? applyWhatsapp;
-  const startIMessage = internals.applyIMessage ?? applyIMessage;
-  const startEmail = internals.applyEmail ?? applyEmail;
-  const startMatrix = internals.applyMatrix ?? applyMatrix;
-  const channels = [
-    ['feishu', startFeishu],
-    ['weixin', startWeixin],
-    ['dingtalk', startDingtalk],
-    ['wecom', startWecom],
-    ['wecomApp', startWecomApp],
-    ['qq', startQq],
-    ['slack', startSlack],
-    ['telegram', startTelegram],
-    ['discord', startDiscord],
-    ['whatsapp', startWhatsapp],
-    ['imessage', startIMessage],
-    ['email', startEmail],
-    ['matrix', startMatrix],
-    ['office', startOffice],
-  ];
+  const channels = [['weixin', startWeixin]];
   return Object.freeze({
     name,
     inject,
+    provide,
     async apply(ctx, config = {}) {
       const unavailableSessionSyncChannels = channels
         .map(([channel]) => channel)
-        .filter((channel) => channel !== 'office'
-          && config[channel]?.harnessBaseUrl !== undefined);
+        .filter((channel) => config[channel]?.harnessBaseUrl !== undefined);
       const deliveryService = makeDeliveryService({
-        unavailableSessionSyncChannels: unavailableSessionSyncChannels.map((channel) => channel === 'wecomApp' ? 'wecom-app' : channel),
+        unavailableSessionSyncChannels,
         dsBot: createDsBotClient(ctx),
       });
       // The delivery switches are the master for everything that follows a Session
-      // through its targets: with both off, `listSessionSyncTargets` answers empty,
-      // so neither the coordinator nor a channel's own mirror (Feishu card) sends.
+      // through its targets: with both off, `listSessionSyncTargets` answers empty.
       // A settings read failure must not disable delivery, so it falls through.
       if (typeof deliveryService.listSessionSyncTargets === 'function') {
         const rawListSessionSyncTargets = deliveryService.listSessionSyncTargets.bind(deliveryService);

@@ -479,6 +479,11 @@ export function UpdatePanel({ rpcCall, clientVersion, onStatus }) {
           desktop: snapshot?.environmentKind === 'desktop',
         })),
       h('footer', { className: 'dim-updateFooter' },
+        h('a', {
+          className: 'dim-updateButton',
+          href: 'https://github.com/Pr1Stu/dsh-better-wechat',
+          target: '_blank', rel: 'noopener noreferrer',
+        }, 'GitHub'),
         h('button', { type: 'button', className: 'dim-updateButton', onClick: () => setOpen(false) }, '关闭'),
         restartRequired || !activeJob ? h('button', {
           type: 'button', className: 'dim-updateButton', disabled: busyAction,

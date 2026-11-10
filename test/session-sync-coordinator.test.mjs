@@ -12,7 +12,6 @@ import {
   installSessionSyncCoordinator,
   isImOwnedInput,
 } from '../plugin-src/host/session-sync-coordinator.mjs';
-import { registerSessionSyncMirror } from '../src/channels/shared/session-sync-registry.mjs';
 
 const WEB_SOURCE = Object.freeze({ kind: 'user', rpcId: 'web-rpc' });
 const CONTEXT_SOURCE = Object.freeze({ kind: 'runtime-context' });
@@ -658,7 +657,7 @@ test('a bot without configured targets delivers through the Session binding', as
 
 /**
  * A delivery service for a bot with configured targets. `sends` records what the
- * text path delivered, so a test can prove the card replaced it.
+ * text path delivered.
  */
 function targetService(sends, targets) {
   return {
@@ -695,7 +694,7 @@ async function scheduledTurn(coordinator, text, sessionId = 'session-1', turn = 
 
 test('disabled saved targets never fall through to Session binding delivery', async (t) => {
   const sends = [];
-  const service = targetService(sends, [{ channel: 'feishu', botId: 'bot-1', targetId: 't1' }]);
+  const service = targetService(sends, [{ channel: 'weixin', botId: 'bot-1', targetId: 't1' }]);
   service.listSessionSyncTargets = async () => [];
   service.deliverSessionText = async () => { sends.push('binding'); return { sent: true }; };
   const coordinator = createSessionSyncCoordinator({
@@ -706,96 +705,4 @@ test('disabled saved targets never fall through to Session binding delivery', as
   t.after(() => coordinator.close());
   await scheduledTurn(coordinator, 'scheduled answer');
   assert.deepEqual(sends, []);
-});
-
-test('a confirmed card is the answer: the coordinator sends no second copy', async (t) => {
-  const rendered = [];
-  const unregister = registerSessionSyncMirror({ channel: 'feishu', botId: 'bot-1' },
-    async (request) => {
-      rendered.push(request);
-      return true;
-    });
-  t.after(unregister);
-  const sends = [];
-  const coordinator = createSessionSyncCoordinator({
-    deliveryService: targetService(sends, [{ channel: 'feishu', botId: 'bot-1', targetId: 't1' }]),
-    loadSettings: settings({ deliverModelAnswers: true, modelIcon: '🤖' }),
-  });
-  await scheduledTurn(coordinator, 'scheduled answer');
-  coordinator.close();
-
-  assert.deepEqual(sends, [], 'the card already carries the answer');
-  assert.equal(rendered.length, 1);
-  assert.deepEqual(rendered[0].target, { channel: 'feishu', botId: 'bot-1', targetId: 't1' });
-  assert.equal(rendered[0].sessionId, 'session-1');
-  assert.equal(rendered[0].turn, 1);
-  // The card shows the answer itself, without the label that marks a message.
-  assert.equal(rendered[0].text, 'scheduled answer');
-});
-
-test('an unconfirmed card falls back to exactly one text delivery', async (t) => {
-  for (const [label, render] of Object.entries({
-    'renders nothing': async () => false,
-    'throws': async () => { throw new Error('provider failure'); },
-  })) {
-    const unregister = registerSessionSyncMirror({ channel: 'feishu', botId: 'bot-1' }, render);
-    const sends = [];
-    const warnings = [];
-    const coordinator = createSessionSyncCoordinator({
-      deliveryService: targetService(sends, [{ channel: 'feishu', botId: 'bot-1', targetId: 't1' }]),
-      loadSettings: settings({ deliverModelAnswers: true, modelIcon: '🤖' }),
-      logger: { warn: (line) => warnings.push(line) },
-    });
-    await scheduledTurn(coordinator, 'scheduled answer');
-    coordinator.close();
-    unregister();
-
-    assert.equal(sends.length, 1, label);
-    assert.equal(sends[0].targetId, 't1', label);
-    assert.equal(sends[0].options.format, 'plain', label);
-    assert.equal(sends[0].text, '🤖\n\nscheduled answer', label);
-  }
-});
-
-test('only the targets whose card did not confirm receive text', async (t) => {
-  const unregister = registerSessionSyncMirror({ channel: 'feishu', botId: 'bot-1' },
-    async () => true);
-  t.after(unregister);
-  const sends = [];
-  const targets = [
-    { channel: 'feishu', botId: 'bot-1', targetId: 't1' },
-    { channel: 'telegram', botId: 'bot-2', targetId: 't2' },
-  ];
-  const coordinator = createSessionSyncCoordinator({
-    deliveryService: targetService(sends, targets),
-    loadSettings: settings({ deliverModelAnswers: true }),
-  });
-  await scheduledTurn(coordinator, 'scheduled answer');
-  coordinator.close();
-
-  assert.deepEqual(sends.map((entry) => [entry.botId, entry.targetId]), [['bot-2', 't2']]);
-  assert.equal(sends[0].options.format, 'markdown', 'a text target keeps its rich rendering');
-});
-
-test('a mirrored user input never waits for a card receipt', async (t) => {
-  const rendered = [];
-  const unregister = registerSessionSyncMirror({ channel: 'feishu', botId: 'bot-1' },
-    async (request) => { rendered.push(request); return true; });
-  t.after(unregister);
-  const sends = [];
-  const coordinator = createSessionSyncCoordinator({
-    deliveryService: targetService(sends, [{ channel: 'feishu', botId: 'bot-1', targetId: 't1' }]),
-    loadSettings: settings({ mirrorUserInput: true, deliverModelAnswers: true, inputIcon: '👤' }),
-  });
-  void coordinator.enqueue('session-1', turnStart());
-  void coordinator.enqueue('session-1', userMessage('desktop input'));
-  void coordinator.enqueue('session-1', assistantMessage(0, 'answer'));
-  void coordinator.enqueue('session-1', turnEnd());
-  await coordinator.whenIdle();
-  coordinator.close();
-
-  // The input has no card of its own, so its echo stays a text message; only the
-  // final answer is owned by the card.
-  assert.deepEqual(sends.map((entry) => entry.text), ['👤\n\ndesktop input']);
-  assert.deepEqual(rendered.map((entry) => entry.text), ['answer']);
 });

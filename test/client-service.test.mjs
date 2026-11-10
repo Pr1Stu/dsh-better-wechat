@@ -237,20 +237,19 @@ test('render returns fresh elements of a stable type without changing settings o
   assert.equal(entry.component().type, first.type, 'both entries share the panel builder');
 });
 
-test('preferred section is initial-only, invalid sections retain the web default', (t) => {
+test('preferred section is initial-only and removed channels fall back to Weixin', (t) => {
   const host = start(t);
-  for (const id of ['weixin', 'feishu', 'dingtalk', 'wecom', 'wecomApp', 'qq', 'slack',
-    'telegram', 'discord', 'whatsapp', 'imessage', 'matrix', 'office', 'global-settings', 'unknown', undefined]) {
+  for (const id of ['weixin', 'sim-weixin', 'jev', 'global-settings', 'feishu', 'unknown', undefined]) {
     const markup = renderToStaticMarkup(host.service.render({ preferredSectionId: id }));
-    const expected = !id || id === 'unknown' ? 'weixin' : id;
+    const expected = !id || ['feishu', 'unknown'].includes(id) ? 'weixin' : id;
     assert.ok(markup.includes(`id="dim-panel-${expected}"`), String(id));
   }
   let renderer;
-  act(() => { renderer = create(host.service.render({ preferredSectionId: 'feishu' })); });
+  act(() => { renderer = create(host.service.render({ preferredSectionId: 'jev' })); });
   t.after(() => act(() => renderer.unmount()));
-  act(() => renderer.root.findByProps({ id: 'dim-tab-qq' }).props.onClick());
-  act(() => renderer.update(host.service.render({ preferredSectionId: 'telegram' })));
-  assert.equal(renderer.root.findByProps({ role: 'tabpanel' }).props.id, 'dim-panel-qq');
+  act(() => renderer.root.findByProps({ id: 'dim-tab-weixin' }).props.onClick());
+  act(() => renderer.update(host.service.render({ preferredSectionId: 'jev' })));
+  assert.equal(renderer.root.findByProps({ role: 'tabpanel' }).props.id, 'dim-panel-weixin');
 });
 
 test('embedded panel receives the same management calls and picker, ignoring injected overrides', async (t) => {
@@ -258,20 +257,18 @@ test('embedded panel receives the same management calls and picker, ignoring inj
   const dependencies = [...host.entries][0].options.inject();
   host.service.setSettingsVisible(false);
   let renderer;
-  act(() => { renderer = create(host.service.render({ feishuRpcCall: () => { throw Error('override'); } })); });
+  act(() => { renderer = create(host.service.render({ weixinRpcCall: () => { throw Error('override'); } })); });
   t.after(() => act(() => renderer.unmount()));
   const props = renderer.root.findByType(IMSettingsTab).props;
   for (const [name, value] of Object.entries(dependencies)) assert.equal(props[name], value, name);
   const before = host.calls.length;
   const signal = new AbortController().signal;
-  for (const name of ['feishuRpcCall', 'emailRpcCall', 'matrixRpcCall', 'updateRpcCall', 'deliveryRpcCall', 'globalSettingsRpcCall']) {
+  for (const name of ['weixinRpcCall', 'updateRpcCall', 'deliveryRpcCall', 'globalSettingsRpcCall']) {
     props[name]('check', { test: true }, signal);
   }
-  assert.equal(host.calls.length, before + 6);
+  assert.equal(host.calls.length, before + 4);
   assert.deepEqual(host.calls.slice(before).map((args) => args.slice(1)), [
-    ['dsh-im/feishu', { method: 'check', payload: { test: true } }, signal],
-    ['dsh-im/email', { method: 'check', payload: { test: true } }, signal],
-    ['dsh-im/matrix', { method: 'check', payload: { test: true } }, signal],
+    ['dsh-im/weixin', { method: 'check', payload: { test: true } }, signal],
     ['dsh-im/dsh-im', { method: 'check', payload: { test: true } }, signal],
     ['dsh-im/dsh-im-delivery', { method: 'check', payload: { test: true } }, signal],
     ['dsh-im/dsh-im-settings', { method: 'check', payload: { test: true } }, signal],
@@ -286,11 +283,11 @@ test('embedded panel changes language without remounting and unsubscribes on unm
   const host = start(t);
   let renderer;
   act(() => { renderer = create(host.service.render()); });
-  act(() => renderer.root.findByProps({ id: 'dim-tab-qq' }).props.onClick());
+  act(() => renderer.root.findByProps({ id: 'dim-tab-jev' }).props.onClick());
   assert.equal(host.listeners.size, 2);
   act(() => host.locale('en'));
   assert.match(JSON.stringify(renderer.toJSON()), /General settings/);
-  assert.equal(renderer.root.findByProps({ role: 'tabpanel' }).props.id, 'dim-panel-qq');
+  assert.equal(renderer.root.findByProps({ role: 'tabpanel' }).props.id, 'dim-panel-jev');
   act(() => host.locale('zh'));
   assert.match(JSON.stringify(renderer.toJSON()), /通用设置/);
   act(() => renderer.unmount());

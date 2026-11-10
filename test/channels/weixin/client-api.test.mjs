@@ -13,8 +13,10 @@ import { configValidationError, withConfigResource } from '../../../src/channels
 import { setImHostLanguage } from '../../../src/channels/shared/i18n.mjs';
 import {
   AccountCard,
+  JevSettings,
   WeixinSettingsTab,
 } from '../../../plugin-src/client/channels/weixin/index.js';
+import { SimWeixinSettings } from '../../../plugin-src/client/sim-weixin.js';
 
 const { act, create } = TestRenderer;
 
@@ -249,4 +251,25 @@ test('Weixin management failures stay visible with a copyable diagnostic', async
     if (operation === 'bot.delete') assert.ok(buttonNamed(renderer.root, '确认移除'));
     await act(async () => { renderer.unmount(); });
   }
+});
+
+test('Jev settings render the smart switching switch, endpoint and service test', () => {
+  const markup = renderToStaticMarkup(React.createElement(JevSettings, { rpcCall: async () => {} }));
+  const weixin = renderToStaticMarkup(React.createElement(WeixinSettingsTab, { rpcCall: async () => {} }));
+  assert.match(markup, /智能切换设置/);
+  assert.match(markup, /role="switch"/);
+  assert.match(markup, /name="endpoint"/);
+  assert.match(markup, /name="apiKey" type="password"/);
+  assert.match(markup, />测试连接</);
+  assert.match(markup, /type="submit"/);
+  assert.doesNotMatch(weixin, /name="apiKey"/);
+});
+
+
+test('simulated Weixin renders as a standalone access-point channel', () => {
+  const markup = renderToStaticMarkup(React.createElement(SimWeixinSettings));
+  assert.match(markup, /模拟微信/);
+  assert.match(markup, /标准 iLink/);
+  assert.match(markup, /http:\/\/127\.0\.0\.1:42049\//);
+  assert.match(markup, /node src\/cli\.mjs/);
 });

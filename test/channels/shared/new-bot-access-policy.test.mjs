@@ -8,8 +8,8 @@ import { initialAccessPolicyFor } from '../../../plugin-src/host/channels/shared
 import { createAccessPolicy, createAccessPolicyScope } from '../../../src/channels/shared/access-policy.mjs';
 import { evaluateInboundAccess } from '../../../src/channels/shared/inbound-access.mjs';
 
-for (const channel of ['feishu', 'qq']) {
-  test(`${channel} opens new bot messages and commands while preserving saved policies and legacy migration`, async (t) => {
+for (const channel of ['weixin']) {
+  test(`${channel} seeds a new bot with an empty allowlist while preserving saved policies and legacy migration`, async (t) => {
     const dataDir = await mkdtemp(join(tmpdir(), `dsh-new-access-${channel}-`));
     t.after(() => rm(dataDir, { recursive: true, force: true }));
     const path = join(dataDir, 'workspaces.json');
@@ -88,21 +88,12 @@ for (const channel of ['feishu', 'qq']) {
     const fresh = await connect(freshBot);
     const freshPolicy = fresh.getSettings();
     for (const conversationType of ['direct', 'group']) {
-      assert.equal(freshPolicy[conversationType].mode, 'open');
+      assert.equal(freshPolicy[conversationType].mode, 'allowlist');
+      assert.deepEqual(freshPolicy[conversationType].allowlist.users, []);
       assert.deepEqual(checkAccess(fresh, conversationType, 'other', 'hello'),
-        { allowed: true, reason: 'allowed' });
-      assert.equal(freshPolicy[conversationType].open.defaultCanExecuteCommands, true);
+        { allowed: false, reason: 'sender-not-allowed' });
       assert.deepEqual(checkAccess(fresh, conversationType, 'other', '/status'),
-        { allowed: true, reason: 'allowed' });
-      assert.deepEqual(checkAccess(fresh, conversationType, 'owner', '/status'),
-        { allowed: true, reason: 'privileged-sender' });
-    }
-
-    const manualBot = bot('manual', '*');
-    bots.push(manualBot);
-    const manual = await connect(manualBot);
-    for (const conversationType of ['direct', 'group']) {
-      assert.equal(checkAccess(manual, conversationType, 'other', '/status').allowed, true);
+        { allowed: false, reason: 'sender-not-allowed' });
     }
 
     const customizedBot = bot('customized');
@@ -114,7 +105,7 @@ for (const channel of ['feishu', 'qq']) {
 
     await production.close();
     production = await start();
-    const expected = [legacyPolicy, restricted, null, chatOnly, freshPolicy, manual.getSettings(), restricted];
+    const expected = [legacyPolicy, restricted, null, chatOnly, freshPolicy, restricted];
     for (const [index, config] of bots.entries()) {
       assert.deepEqual((await connect(config)).getSettings(), expected[index], `${config.botId} after restart`);
     }

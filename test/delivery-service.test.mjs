@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createDeliveryAdapter } from '../plugin-src/host/delivery-adapter.mjs';
 import { createDeliveryService } from '../plugin-src/host/delivery-service.mjs';
 
-function memoryAdapter({ channel = 'telegram', botId = 'bot_one' } = {}) {
+function memoryAdapter({ channel = 'weixin', botId = 'bot_one' } = {}) {
   const targets = new Map();
   const sends = [];
   return {
@@ -13,7 +13,7 @@ function memoryAdapter({ channel = 'telegram', botId = 'bot_one' } = {}) {
     listBots: () => [botId],
     ownsBot: (candidate) => candidate === botId,
     listTargets: () => [...targets.values()].map((target) => structuredClone(target)),
-    listSuggestions: () => [{ kind: 'chat', route: { chatId: '123' } }],
+    listSuggestions: () => [{ kind: 'user', route: { toUserId: '123' } }],
     async createTarget(_botId, target) {
       if (targets.has(target.targetId)) {
         const error = new Error('duplicate');
@@ -51,34 +51,34 @@ test('DeliveryService shares target CRUD and sending through one adapter', async
   const target = {
     targetId: 'daily-report',
     name: 'Daily report',
-    kind: 'chat',
-    route: { chatId: 123 },
+    kind: 'user',
+    route: { toUserId: '123' },
   };
 
   assert.deepEqual(await service.createTarget('bot_one', target), target);
   assert.deepEqual(await service.listTargets('bot_one'), {
     botId: 'bot_one',
-    channel: 'telegram',
+    channel: 'weixin',
     targets: [{
       ...target,
       sessionSync: { enabled: false, state: 'unavailable' },
     }],
   });
-  assert.deepEqual(await service.listBots(), [{ botId: 'bot_one', channel: 'telegram' }]);
+  assert.deepEqual(await service.listBots(), [{ botId: 'bot_one', channel: 'weixin' }]);
   assert.deepEqual(await service.listSuggestions('bot_one'), {
     botId: 'bot_one',
-    channel: 'telegram',
-    suggestions: [{ kind: 'chat', route: { chatId: '123' } }],
+    channel: 'weixin',
+    suggestions: [{ kind: 'user', route: { toUserId: '123' } }],
   });
   assert.deepEqual(await service.updateTarget('bot_one', 'daily-report', {
     name: 'New target',
-    kind: 'chat',
-    route: { chatId: 456 },
+    kind: 'user',
+    route: { toUserId: '456' },
   }), {
     targetId: 'daily-report',
     name: 'New target',
-    kind: 'chat',
-    route: { chatId: 456 },
+    kind: 'user',
+    route: { toUserId: '456' },
   });
 
   const signal = new AbortController().signal;
@@ -91,8 +91,8 @@ test('DeliveryService shares target CRUD and sending through one adapter', async
     {
       targetId: 'daily-report',
       name: 'New target',
-      kind: 'chat',
-      route: { chatId: 456 },
+      kind: 'user',
+      route: { toUserId: '456' },
     },
     'keep original whitespace\n',
     { signal },
@@ -117,7 +117,7 @@ test('DeliveryService validates public ids, text, cancellation, and unknown bots
   });
   await assert.rejects(
     service.updateTarget('bot_one', 'target', {
-      targetId: 'renamed', kind: 'chat', route: { chatId: 1 },
+      targetId: 'renamed', kind: 'user', route: { toUserId: '1' },
     }),
     { code: 'bad-request' },
   );
@@ -128,7 +128,7 @@ test('DeliveryService tests a validated draft route without reading or persistin
   const workspaceCalls = [];
   const sends = [];
   service.registerAdapter(createDeliveryAdapter({
-    channel: 'telegram',
+    channel: 'weixin',
     workspaces: {
       has: (botId) => botId === 'bot_one',
       listDeliveryTargets: (...args) => workspaceCalls.push(['list', ...args]),
@@ -142,10 +142,7 @@ test('DeliveryService tests a validated draft route without reading or persistin
     stateFor: async () => ({ snapshot: () => ({ sessions: {} }) }),
   }));
   const signal = new AbortController().signal;
-  const draft = {
-    kind: 'topic',
-    route: { chatId: '-1001234567890', messageThreadId: 42 },
-  };
+  const draft = { kind: 'user', route: { toUserId: 'wx-user' } };
 
   assert.deepEqual(
     await service.send('bot_one', draft, 'draft test', { signal }),
@@ -159,8 +156,8 @@ test('DeliveryService tests a validated draft route without reading or persistin
     { signal },
   ]]);
   assert.deepEqual(draft, {
-    kind: 'topic',
-    route: { chatId: '-1001234567890', messageThreadId: 42 },
+    kind: 'user',
+    route: { toUserId: 'wx-user' },
   });
 
   await assert.rejects(
@@ -173,7 +170,7 @@ test('DeliveryService tests a validated draft route without reading or persistin
   );
   await assert.rejects(
     service.send('bot_one', {
-      kind: 'topic', route: { chatId: '-1001234567890', messageThreadId: '42' },
+      kind: 'user', route: { toUserId: '' },
     }, 'draft test'),
     { code: 'invalid-target' },
   );
@@ -186,7 +183,7 @@ test('a Session delivery follows the binding instead of a configured target', as
   const service = createDeliveryService({ logger: { warn: (line) => warnings.push(line) } });
   const sends = [];
   service.registerAdapter(createDeliveryAdapter({
-    channel: 'telegram',
+    channel: 'weixin',
     workspaces: {
       has: (botId) => botId === 'bot_one',
       listBotIds: () => ['bot_one'],
@@ -199,41 +196,27 @@ test('a Session delivery follows the binding instead of a configured target', as
     stateFor: async () => ({
       snapshot: () => ({
         sessions: {
-          'group:-1004337494578:42': 'session-topic',
-          'direct:777': 'session-direct',
+          'p2p:777': 'session-direct',
           // A key the channel can persist but no delivery route covers.
           'unroutable-key': 'session-unroutable',
-          // A legacy Telegram key that once carried a thread after the chat id.
-          'direct:777:42': 'session-legacy',
+          // A malformed private key must never be guessed into a recipient.
+          'p2p:777:42': 'session-legacy',
         },
       }),
     }),
   }));
 
-  // A forum topic keeps its thread: the conversation key becomes the draft
-  // route the ordinary delivery path already accepts.
-  assert.deepEqual(
-    await service.deliverSessionText('session-topic', 'topic text', { format: 'markdown' }),
-    { sent: true },
-  );
+  assert.deepEqual(await service.deliverSessionText('session-direct', 'direct text', { format: 'markdown' }), { sent: true });
   assert.deepEqual(sends, [[
     'bot_one',
     {
       targetId: '__test__',
-      kind: 'topic',
-      route: { chatId: '-1004337494578', messageThreadId: 42 },
+      kind: 'user',
+      route: { toUserId: '777' },
     },
-    'topic text',
+    'direct text',
     { signal: undefined, format: 'markdown' },
   ]]);
-
-  assert.deepEqual(await service.deliverSessionText('session-direct', 'direct text'), { sent: true });
-  assert.deepEqual(sends[1], [
-    'bot_one',
-    { targetId: '__test__', kind: 'chat', route: { chatId: '777' } },
-    'direct text',
-    { signal: undefined },
-  ]);
 
   // Nowhere to go is a result, not a failure, but it is never silent: the log
   // names the Session, the channel and the key, and never the body itself.
@@ -246,13 +229,32 @@ test('a Session delivery follows the binding instead of a configured target', as
     sent: false,
     reason: 'unroutable',
   });
-  // A legacy `direct:<chatId>:<threadId>` key is reported, never reinterpreted
-  // as a chat: guessing a recipient would drop the thread and message the wrong
-  // place.
   assert.deepEqual(await service.deliverSessionText('session-legacy', body), {
     sent: false,
     reason: 'unroutable',
   });
+  assert.equal(sends.length, 1, 'no unroutable key reached a chat');
+  assert.deepEqual(warnings, [
+    '[dsh-im] Session text was not delivered [unbound] session=session-unbound',
+    '[dsh-im] Session text was not delivered [unroutable] session=session-unroutable'
+      + ' channel=weixin conversationKey=unroutable-key',
+    '[dsh-im] Session text was not delivered [unroutable] session=session-legacy'
+      + ' channel=weixin conversationKey=p2p:777:42',
+  ]);
+  assert.doesNotMatch(warnings.join('\n'), /body that must not be logged/);
+
+  await assert.rejects(service.deliverSessionText('', 'text'), { code: 'bad-request' });
+  await assert.rejects(service.deliverSessionText('session-direct', '   '), { code: 'bad-request' });
+  await assert.rejects(service.deliverSessionText('session-direct', 'text', { format: 'html' }), {
+    code: 'bad-request',
+  });
+  const abort = new AbortController();
+  abort.abort();
+  await assert.rejects(service.deliverSessionText('session-direct', 'text', { signal: abort.signal }), {
+    code: 'cancelled',
+  });
+  assert.equal(sends.length, 1);
+});
 
 test('deliverSessionText resolves a rolled-over DS Bot session through dsBot.status()', async () => {
   const service = createDeliveryService({
@@ -260,13 +262,13 @@ test('deliverSessionText resolves a rolled-over DS Bot session through dsBot.sta
   });
   const sends = [];
   service.registerAdapter(createDeliveryAdapter({
-    channel: 'telegram',
+    channel: 'weixin',
     workspaces: {
       has: (botId) => botId === 'bot_one',
       listBotIds: () => ['bot_one'],
       listDeliveryTargets: () => [],
       listSessionSyncTargets: () => [],
-      listDsBotBindings: () => [{ botId: 'bot_one', conversationKey: 'direct:777', dsBotId: 'dsbot-1' }],
+      listDsBotBindings: () => [{ botId: 'bot_one', conversationKey: 'p2p:777', dsBotId: 'dsbot-1' }],
     },
     coreController: {
       async sendProactiveText(...args) { sends.push(args); },
@@ -277,86 +279,10 @@ test('deliverSessionText resolves a rolled-over DS Bot session through dsBot.sta
   assert.deepEqual(await service.deliverSessionText('session-rolled', 'answer'), { sent: true });
   assert.deepEqual(sends, [[
     'bot_one',
-    { targetId: '__test__', kind: 'chat', route: { chatId: '777' } },
+    { targetId: '__test__', kind: 'user', route: { toUserId: '777' } },
     'answer',
     { signal: undefined },
   ]]);
-});
-  assert.equal(sends.length, 2, 'no legacy key reached a chat');
-  assert.deepEqual(warnings, [
-    '[dsh-im] Session text was not delivered [unbound] session=session-unbound',
-    '[dsh-im] Session text was not delivered [unroutable] session=session-unroutable'
-      + ' channel=telegram conversationKey=unroutable-key',
-    '[dsh-im] Session text was not delivered [unroutable] session=session-legacy'
-      + ' channel=telegram conversationKey=direct:777:42',
-  ]);
-  assert.doesNotMatch(warnings.join('\n'), /body that must not be logged/);
-
-  await assert.rejects(service.deliverSessionText('', 'text'), { code: 'bad-request' });
-  await assert.rejects(service.deliverSessionText('session-topic', '   '), { code: 'bad-request' });
-  await assert.rejects(service.deliverSessionText('session-topic', 'text', { format: 'html' }), {
-    code: 'bad-request',
-  });
-  const abort = new AbortController();
-  abort.abort();
-  await assert.rejects(service.deliverSessionText('session-topic', 'text', { signal: abort.signal }), {
-    code: 'cancelled',
-  });
-  assert.equal(sends.length, 2);
-});
-
-test('a group Session receives mirrored text but never a synced question or approval', async () => {
-  const target = {
-    targetId: 'topic', name: 'Team topic', kind: 'topic',
-    route: { chatId: '-1001234567890', messageThreadId: 42 },
-  };
-  const sessions = { 'group:-1001234567890:42': 'session-topic' };
-  const calls = [];
-  const offer = (name) => async (...args) => { calls.push([name, ...args]); return true; };
-  const workspaces = {
-    has: () => true,
-    listBotIds: () => ['bot-telegram'],
-    listDeliveryTargets: () => [structuredClone(target)],
-    deliveryTargetFor: (_botId, targetId) => (targetId === target.targetId ? structuredClone(target) : null),
-    listSessionSyncTargets: () => [{
-      botId: 'bot-telegram',
-      targetId: target.targetId,
-      conversationKey: 'group:-1001234567890:42',
-    }],
-    createDeliveryTarget() {},
-    updateDeliveryTarget() {},
-    deleteDeliveryTarget() {},
-  };
-  const service = createDeliveryService({ logger: { warn: () => {} } });
-  service.registerAdapter(createDeliveryAdapter({
-    channel: 'telegram',
-    workspaces,
-    coreController: {
-      async sendProactiveText(...args) { calls.push(['text', ...args]); },
-      presentSessionSyncApproval: offer('approval'),
-      presentSessionSyncQuestion: offer('question'),
-    },
-    stateFor: async () => ({ snapshot: () => ({ sessions }) }),
-  }));
-
-  // Mirrored text follows the group route...
-  assert.deepEqual(
-    await service.deliverSessionText('session-topic', 'mirrored', { format: 'markdown' }),
-    { sent: true },
-  );
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], 'text');
-
-  // ...while a question or an approval would be answerable by any group member,
-  // so the group is not a candidate and nothing is offered there — not even the
-  // "answer on the desktop" notice that private targets receive.
-  assert.deepEqual(await service.listSessionSyncTargets('session-topic'), []);
-  assert.equal(await service.presentSessionSyncQuestion('session-topic', { kind: 'question' }), false);
-  assert.equal(
-    await service.presentSessionSyncApproval('session-topic', { payload: { toolName: 'bash' } }),
-    false,
-  );
-  assert.deepEqual(calls.map((entry) => entry[0]), ['text']);
 });
 
 test('DeliveryService revalidates suggestions before exposing adapter output', async () => {
@@ -434,7 +360,7 @@ test('DeliveryService exposes and revalidates local Session sync without changin
     enabled: true, state: 'active',
   });
   assert.deepEqual(await service.listSessionSyncTargets('session-one'), [{
-    channel: 'telegram', botId: 'bot_one', targetId: 'direct',
+    channel: 'weixin', botId: 'bot_one', targetId: 'direct',
   }]);
   assert.deepEqual(
     await service.sendSessionSyncText('bot_one', 'direct', 'session-one', 'hello'),
@@ -458,7 +384,7 @@ test('DeliveryService exposes and revalidates local Session sync without changin
 });
 
 test('DeliveryService marks explicit remote Harness channels unavailable for Session sync', async () => {
-  const service = createDeliveryService({ unavailableSessionSyncChannels: ['telegram'] });
+  const service = createDeliveryService({ unavailableSessionSyncChannels: ['weixin'] });
   const adapter = memoryAdapter();
   const calls = [];
   adapter.listTargets = () => [{
@@ -488,15 +414,15 @@ test('DeliveryService marks explicit remote Harness channels unavailable for Ses
 
 function checkedFixture() {
   const service = createDeliveryService();
-  const adapter = memoryAdapter({channel: 'feishu'});
+  const adapter = memoryAdapter({channel: 'weixin'});
   const fingerprint = 'a'.repeat(64);
-  adapter.describeAccount = async () => ({version: 1, botId: 'bot_one', channel: 'feishu',
+  adapter.describeAccount = async () => ({version: 1, botId: 'bot_one', channel: 'weixin',
     connected: true, capabilities: ['proactive-text-checked'], account: {fingerprint}});
   return {service, adapter, fingerprint};
 }
 
 async function checkedTarget(fx) {
-  const target = {targetId: 'self', kind: 'user', route: {openId: 'ou_self'}};
+  const target = {targetId: 'self', kind: 'user', route: {toUserId: 'ou_self'}};
   await fx.service.createTarget('bot_one', target);
   const {createHash} = await import('node:crypto');
   return createHash('sha256').update(JSON.stringify({kind: target.kind, route: target.route})).digest('hex');
@@ -508,7 +434,7 @@ test('checked sending rejects changed targets and account identities before a si
   await assert.rejects(fx.service.sendChecked('bot_one', 'self', 'hello', {
     expectedFingerprint: 'b'.repeat(64), expectedTargetDigest: digest,
   }), {code: 'account-changed'});
-  await fx.service.updateTarget('bot_one', 'self', {kind: 'user', route: {openId: 'ou_other'}});
+  await fx.service.updateTarget('bot_one', 'self', {kind: 'user', route: {toUserId: 'ou_other'}});
   await assert.rejects(fx.service.sendChecked('bot_one', 'self', 'hello', {
     expectedFingerprint: fx.fingerprint, expectedTargetDigest: digest,
   }), {code: 'target-changed'});
@@ -520,13 +446,13 @@ test('checked sending freezes the authorized route across an alias edit during a
   const digest = await checkedTarget(fx);
   const describe = fx.adapter.describeAccount;
   fx.adapter.describeAccount = async () => {
-    await fx.adapter.updateTarget('bot_one', 'self', {kind: 'user', route: {openId: 'ou_other'}});
+    await fx.adapter.updateTarget('bot_one', 'self', {kind: 'user', route: {toUserId: 'ou_other'}});
     return describe();
   };
   assert.deepEqual(await fx.service.sendChecked('bot_one', 'self', 'hello', {
     expectedFingerprint: fx.fingerprint, expectedTargetDigest: digest,
   }), {sent: true});
-  assert.deepEqual(fx.adapter.sends[0][1].route, {openId: 'ou_self'});
+  assert.deepEqual(fx.adapter.sends[0][1].route, {toUserId: 'ou_self'});
   assert.equal(fx.adapter.sends[0][3].expectedFingerprint, fx.fingerprint);
 });
 
@@ -554,33 +480,12 @@ test('checked account discovery fences replacement even when the same adapter ob
   adapter.describeAccount = async () => {
     ++calls;
     service.registerAdapter(adapter);
-    return {version: 1, botId: 'bot_one', channel: 'telegram', account: {fingerprint: 'a'.repeat(64)}, connected: true, capabilities: ['proactive-text-checked']};
+    return {version: 1, botId: 'bot_one', channel: 'weixin', account: {fingerprint: 'a'.repeat(64)}, connected: true, capabilities: ['proactive-text-checked']};
   };
   service.registerAdapter(adapter);
   await assert.rejects(service.describeBot('bot_one'), {code: 'capability-unavailable'});
   assert.equal(calls, 1);
   assert.equal(adapter.sends.length, 0);
-});
-
-test('checked receipt requires capability and exact frozen group correspondence, never resends', async () => {
-  const fx = checkedFixture(); fx.service.registerAdapter(fx.adapter);
-  const target = { targetId: 'group', kind: 'group', route: { chatId: 'oc_group' } };
-  await fx.service.createTarget('bot_one', target);
-  const { createHash } = await import('node:crypto');
-  const expectedTargetDigest = createHash('sha256').update(JSON.stringify({ kind: target.kind, route: target.route })).digest('hex');
-  const options = { expectedFingerprint: fx.fingerprint, expectedTargetDigest, receipt: true };
-  await assert.rejects(fx.service.sendChecked('bot_one', 'group', 'report', options), { code: 'capability-unavailable' });
-  assert.equal(fx.adapter.sends.length, 0);
-  fx.adapter.describeAccount = async () => ({ version: 1, capabilities: ['proactive-text-checked', 'proactive-receipt-checked'], account: { fingerprint: fx.fingerprint } });
-  let calls = 0;
-  fx.adapter.sendText = async (_id, saved, _text, opts) => {
-    calls++; assert.equal(saved.route.chatId, 'oc_group'); assert.equal(opts.receipt, true);
-    return { sent: true, receipt: { version: 1, messageId: 'om_report', conversationId: 'oc_group', secret: 'not exposed' } };
-  };
-  assert.deepEqual(await fx.service.sendChecked('bot_one', 'group', 'report', options), { sent: true, receipt: { version: 1, messageId: 'om_report', conversationId: 'oc_group' } });
-  fx.adapter.sendText = async () => { calls++; return { sent: true, receipt: { version: 1, messageId: 'om_other', conversationId: 'oc_other' } }; };
-  await assert.rejects(fx.service.sendChecked('bot_one', 'group', 'report', options), { code: 'send-result-unknown' });
-  assert.equal(calls, 2);
 });
 
 test('consumer replacement aborts the old account lease and stale dispose cannot remove its successor', async () => {
@@ -642,8 +547,7 @@ test('checked history discards an in-flight result after provider replacement or
  }
 });
 
-function approvalAdapter(channel, keys, { present = async () => true } = {}) {
-  const botId = `bot_${channel.replaceAll('-', '_')}`;
+function approvalAdapter(channel, keys, { present = async () => true, botId = `bot_${channel.replaceAll('-', '_')}` } = {}) {
   const adapter = memoryAdapter({ channel, botId });
   const offers = [];
   const notices = [];
@@ -661,7 +565,7 @@ for (const scenario of ['aliases', 'multiple-chats', 'unresolved', 'unsupported'
   test(`synced questions: ${scenario} routes to one private chat or sends a desktop notice`, async () => {
     const service = createDeliveryService();
     const keys = scenario === 'multiple-chats' ? ['p2p:a', 'p2p:b'] : ['p2p:a', 'p2p:a'];
-    const { adapter, notices } = approvalAdapter('feishu', keys);
+    const { adapter, notices } = approvalAdapter('weixin', keys);
     const offered = [];
     adapter.describeSessionSyncQuestionTarget = (_bot, id) => {
       if (scenario === 'unresolved' && id === 'target1') throw new Error('binding unavailable');
@@ -682,57 +586,15 @@ for (const scenario of ['aliases', 'multiple-chats', 'unresolved', 'unsupported'
   });
 }
 
-for (const channel of ['feishu', 'weixin', 'dingtalk', 'wecom', 'wecom-app', 'qq', 'telegram', 'slack', 'discord', 'whatsapp', 'matrix']) {
-  test(`${channel}: one real bound private chat gets one approval despite target aliases`, async () => {
-    const service = createDeliveryService();
-    const { adapter, offers, notices } = approvalAdapter(channel, ['private:actor', 'private:actor']);
-    service.registerAdapter(adapter);
-    const interaction = { payload: { toolName: 'bash' } };
-    assert.equal(await service.presentSessionSyncApproval('session', interaction, {
-      completion: new Promise(() => {}),
-    }), true);
-    assert.equal(offers.length, 1);
-    assert.equal(offers[0][3], interaction);
-    assert.equal(notices.length, 0);
-  });
-}
-
-test('multiple bound chats receive a Web notice and cannot compete for approval', async () => {
+test('weixin: one real bound private chat gets one approval despite target aliases', async () => {
   const service = createDeliveryService();
-  const first = approvalAdapter('feishu', ['p2p:a']);
-  const second = approvalAdapter('telegram', ['direct:2']);
-  service.registerAdapter(first.adapter);
-  service.registerAdapter(second.adapter);
-  let finish;
-  const completion = new Promise((resolve) => { finish = resolve; });
-  assert.equal(await service.presentSessionSyncApproval('session', { payload: { toolName: 'bash' } }, { completion }), false);
-  assert.equal(first.offers.length + second.offers.length, 0);
-  assert.match(first.notices[0][3], /Web/);
-  finish('unavailable');
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.match(first.notices.at(-1)[3], /未获批准/);
-});
-
-for (const channel of ['imessage', 'email', 'office']) {
-  test(`${channel}: excluded channels never receive competitive approvals`, async () => {
-    const service = createDeliveryService();
-    const { adapter, offers, notices } = approvalAdapter(channel, ['private:actor']);
-    service.registerAdapter(adapter);
-    assert.equal(await service.presentSessionSyncApproval('session', { payload: { toolName: 'bash' } }), false);
-    assert.equal(offers.length + notices.length, 0);
-  });
-}
-
-
-test('an unresolved second binding cannot make the first chat look unique', async () => {
-  const service = createDeliveryService();
-  const first = approvalAdapter('feishu', ['p2p:a']);
-  const second = approvalAdapter('telegram', ['direct:2']);
-  second.adapter.describeSessionSyncApprovalTarget = () => { throw new Error('state unavailable'); };
-  service.registerAdapter(first.adapter);
-  service.registerAdapter(second.adapter);
-  assert.equal(await service.presentSessionSyncApproval('session', { payload: { toolName: 'bash' } }, {
+  const { adapter, offers, notices } = approvalAdapter('weixin', ['p2p:actor', 'p2p:actor']);
+  service.registerAdapter(adapter);
+  const interaction = { payload: { toolName: 'bash' } };
+  assert.equal(await service.presentSessionSyncApproval('session', interaction, {
     completion: new Promise(() => {}),
-  }), false);
-  assert.equal(first.offers.length + second.offers.length, 0);
+  }), true);
+  assert.equal(offers.length, 1);
+  assert.equal(offers[0][3], interaction);
+  assert.equal(notices.length, 0);
 });

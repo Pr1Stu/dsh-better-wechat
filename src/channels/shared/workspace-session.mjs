@@ -106,6 +106,7 @@ export async function askInWorkspaceSession({
   askOptions,
   deferredDelivery,
   onNotice,
+  onSessionCreated,
 }) {
   const initialTitle = contextEnhanced
     ? initialSessionTitle({
@@ -201,6 +202,7 @@ export async function askInWorkspaceSession({
           } catch (error) {
             console.warn('[dsh-im] unable to record the session in the navigation ring:', error?.message ?? error);
           }
+          await onSessionCreated?.(sessionId);
           return { sessionId, session, recovered: replacingUnreadable };
         }
         return { sessionId, session };

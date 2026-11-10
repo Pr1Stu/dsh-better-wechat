@@ -14,11 +14,11 @@ const bot = { id: 'ds-one', name: 'stepBot', sessionId: 'session-one' };
 async function fixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-dsbot-handoff-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const key = 'c2c:user-one';
+  const key = 'p2p:user-one';
   const workspaces = await new BotWorkspaceStore(join(dir, 'workspaces.json'), { defaultWorkspace: dir }).load();
   await workspaces.ensure('im-one');
   await workspaces.createDeliveryTarget('im-one', {
-    targetId: 'private', kind: 'user', route: { userOpenId: 'user-one' },
+    targetId: 'private', kind: 'user', route: { toUserId: 'user-one' },
   });
   const state = await new ConversationStateStore(join(dir, 'state.json')).load();
   await state.setSession(key, 'old-session');
@@ -28,7 +28,7 @@ async function fixture(t) {
     async resolve(id) { assert.equal(id, bot.id); return current; },
   };
   const adapter = createDeliveryAdapter({
-    channel: 'qq', workspaces, dsBot, stateFor: async () => state,
+    channel: 'weixin', workspaces, dsBot, stateFor: async () => state,
     coreController: { async sendProactiveText() {} },
   });
   const service = new DeliveryService({ dsBot });

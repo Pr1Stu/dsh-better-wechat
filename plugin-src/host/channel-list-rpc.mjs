@@ -1,14 +1,10 @@
-// Read-only management RPC for the channel directory and bound-session transcripts.
+// Read-only management RPC for Weixin account sessions and their transcripts.
 // Transcript reads use official sessionQuery; no archive parsing or sqlite access.
-// The directory covers standard bot/account state plus configured Feishu legacy state.
-// Custom dataDir/botsDir overrides are not inferred.
 import { join, resolve } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { registerManagementRpc } from '../management-rpc.mjs';
-import { LEGACY_FEISHU_SECRET_REF } from '../../src/channels/feishu/plugin-config-store.mjs';
 
 export const CHANNEL_LIST_RPC_CHANNEL = '/dsh-im-channels';
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
@@ -45,101 +41,31 @@ async function readState(path, botId) {
   return sessionRows(raw).map(row => ({ ...row, botId }));
 }
 
-async function feishuLegacyBotIds(integrationRoot, warnings) {
-  let config;
-  try {
-    config = await readJson(join(integrationRoot, 'config.json'));
-  } catch (error) {
-    if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
-      warnings.push(`dsh-feishu/config.json: ${error?.message ?? error}`);
-    }
-    return [];
-  }
-  if (!config || typeof config !== 'object' || Array.isArray(config)) return [];
-  const version2 = config.version === 2 && Array.isArray(config.bots);
-  const bots = version2 ? config.bots : [config];
-  const ids = [];
-  for (const bot of bots) {
-    if (!bot || typeof bot !== 'object' || Array.isArray(bot)) continue;
-    // PluginConfigStore normalizes these fields with trim before selecting state.
-    const id = typeof bot.id === 'string' ? bot.id.trim() : '';
-    const secretRef = typeof bot.secretRef === 'string' ? bot.secretRef.trim() : '';
-    const legacy = version2
-      ? secretRef === LEGACY_FEISHU_SECRET_REF
-      : !secretRef || secretRef === LEGACY_FEISHU_SECRET_REF;
-    if (!legacy) continue;
-    if (/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
-      ids.push(id);
-    } else if (!version2 && typeof bot.appId === 'string' && bot.appId.trim()) {
-      // Match the v1 migration identity without loading the write-capable config store.
-      ids.push(`bot_${createHash('sha256').update(bot.appId.trim()).digest('hex').slice(0, 24)}`);
-    } else {
-      warnings.push('dsh-feishu/config.json: legacy bot has no usable id');
-    }
-  }
-  return [...new Set(ids)];
-}
-
 export async function buildList(config = {}) {
   const root = dshHome(config);
-  const integrationsRoot = join(root, 'integrations');
-  const byChannel = new Map();
+  const integrationRoot = join(root, 'integrations', 'dsh-weixin');
+  const group = { channel: 'weixin', sessions: [] };
   const warnings = [];
   let scannedFiles = 0;
 
-  const integrations = await directoryEntries(integrationsRoot);
-  for (const integration of integrations) {
-    if (!integration.isDirectory() || !/^dsh-[A-Za-z0-9-]+$/.test(integration.name)) continue;
-    const channel = integration.name.slice('dsh-'.length);
-    const integrationRoot = join(integrationsRoot, integration.name);
-    const legacyBotIds = new Set(channel === 'feishu'
-      ? await feishuLegacyBotIds(integrationRoot, warnings)
-      : []);
-
-    const collectState = async (statePath, botId, warningKey) => {
-      let rows;
-      try {
-        rows = await readState(statePath, botId);
-        scannedFiles += 1;
-      } catch (error) {
-        if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
-          warnings.push(`${warningKey}: ${error?.message ?? error}`);
-        }
-        return;
+  const bots = await directoryEntries(join(integrationRoot, 'accounts'));
+  for (const bot of bots) {
+    if (!bot.isDirectory()) continue;
+    try {
+      group.sessions.push(...await readState(
+        join(integrationRoot, 'accounts', bot.name, 'state.json'), bot.name,
+      ));
+      scannedFiles += 1;
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
+        warnings.push(`dsh-weixin/accounts/${bot.name}/state.json: ${error?.message ?? error}`);
       }
-      if (rows.length === 0) return;
-      const group = byChannel.get(channel) ?? { channel, sessions: [] };
-      group.sessions.push(...rows);
-      byChannel.set(channel, group);
-    };
-
-    const container = channel === 'weixin' ? 'accounts' : 'bots';
-    const bots = await directoryEntries(join(integrationRoot, container));
-    for (const bot of bots) {
-      if (!bot.isDirectory() || legacyBotIds.has(bot.name)) continue;
-      await collectState(
-        join(integrationRoot, container, bot.name, 'state.json'),
-        bot.name,
-        `${integration.name}/${bot.name}`,
-      );
-    }
-    for (const botId of legacyBotIds) {
-      await collectState(
-        join(integrationRoot, 'state.json'),
-        botId,
-        `${integration.name}/${botId}/legacy-state`,
-      );
     }
   }
 
-  const channels = [...byChannel.values()]
-    .map(group => ({
-      ...group,
-      sessions: group.sessions.sort((a, b) =>
-        a.key.localeCompare(b.key) || a.sessionId.localeCompare(b.sessionId) || a.botId.localeCompare(b.botId)),
-    }))
-    .sort((a, b) => a.channel.localeCompare(b.channel));
-  return { channels, scannedFiles, warnings };
+  group.sessions.sort((a, b) =>
+    a.key.localeCompare(b.key) || a.sessionId.localeCompare(b.sessionId) || a.botId.localeCompare(b.botId));
+  return { channels: group.sessions.length ? [group] : [], scannedFiles, warnings };
 }
 
 const DEFAULT_DETAIL_LIMIT = 100;

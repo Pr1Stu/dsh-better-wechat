@@ -5,7 +5,7 @@ import * as React from 'react';
 import { WeixinLogoGlyph } from '../../channel-logos.js';
 import { QrActionIcon } from '../../credential-binding.js';
 import { AccountSettingsToggle, CollapsibleAccountSection } from '../shared/collapsible-account.js';
-import { h, localizeTemplate } from '../../i18n.js';
+import { h, localizeTemplate, localizeText } from '../../i18n.js';
 import {
   WEIXIN_ENDPOINTS,
   managementRequestError,
@@ -347,6 +347,217 @@ export function mergeWeixinProvisioningSnapshot(
     ...incoming,
     durationMs: current?.durationMs ?? 5 * 60_000,
   };
+}
+
+const EMPTY_JEV_STATUS = Object.freeze({
+  enabled: false,
+  endpoint: '',
+  classifyConfigured: false,
+  hasApiKey: false,
+  apiKeyPreview: '',
+});
+
+function normalizeJevStatus(value) {
+  const record = value && typeof value === 'object' ? value : {};
+  return {
+    enabled: record.enabled === true,
+    endpoint: typeof record.endpoint === 'string' ? record.endpoint : EMPTY_JEV_STATUS.endpoint,
+    classifyConfigured: record.classifyConfigured === true,
+    hasApiKey: record.hasApiKey === true,
+    apiKeyPreview: typeof record.apiKeyPreview === 'string' ? record.apiKeyPreview : '',
+  };
+}
+
+function normalizeJevTest(value) {
+  const record = value && typeof value === 'object' ? value : {};
+  const state = typeof record.state === 'string' ? record.state : 'unreachable';
+  return {
+    state,
+    ...(Number.isInteger(record.httpStatus) ? { httpStatus: record.httpStatus } : {}),
+    ...(Number.isFinite(record.latencyMs) ? { latencyMs: Math.max(0, Math.round(record.latencyMs)) } : {}),
+  };
+}
+
+function jevTestTone(result) {
+  if (!result) return 'off';
+  if (result.state === 'ok') return 'success';
+  if (result.state === 'http-error') return 'warning';
+  return 'error';
+}
+
+function jevTestText(result, status) {
+  if (!result) return status.hasApiKey ? '尚未测试' : '尚未保存 API Key';
+  if (result.state === 'ok') {
+    return localizeTemplate('Jev 服务正常（{latency} ms）', { latency: result.latencyMs ?? 0 });
+  }
+  if (result.state === 'auth-failed') return 'API Key 无效或没有权限';
+  if (result.state === 'missing-key') return '尚未保存 API Key';
+  if (result.state === 'key-unreadable') return '无法读取已保存的 API Key';
+  if (result.state === 'timeout') return '连接超时';
+  if (result.state === 'http-error') {
+    return localizeTemplate('Jev 服务返回 HTTP {status}', { status: result.httpStatus ?? '?' });
+  }
+  return '无法连接 Jev 服务';
+}
+
+export function JevSettings({ rpcCall }) {
+  const rpcRef = React.useRef(rpcCall);
+  rpcRef.current = rpcCall;
+  const mounted = React.useRef(true);
+  const [status, setStatus] = React.useState(EMPTY_JEV_STATUS);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
+  const [enabled, setEnabled] = React.useState(false);
+  const [endpoint, setEndpoint] = React.useState('');
+  const [apiKey, setApiKey] = React.useState('');
+  const [testResult, setTestResult] = React.useState(null);
+  const [notice, setNotice] = React.useState({ message: '', error: false });
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const value = normalizeJevStatus(unwrapRpcResult(await rpcRef.current(WEIXIN_ENDPOINTS.jevStatus, {})));
+      if (!mounted.current) return;
+      setStatus(value);
+      setEnabled(value.enabled);
+      setEndpoint(value.endpoint);
+    } catch (error) {
+      if (mounted.current) {
+        setNotice({ message: localizeText(error?.message || '无法读取 Jev 设置，请重试。'), error: true });
+      }
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    mounted.current = true;
+    void load();
+    return () => { mounted.current = false; };
+  }, [load]);
+
+  const save = async (event) => {
+    event.preventDefault();
+    if (saving || loading) return;
+    const nextEndpoint = (event.currentTarget.elements.endpoint?.value ?? endpoint).trim();
+    const nextKey = (event.currentTarget.elements.apiKey?.value ?? apiKey).trim();
+    setSaving(true);
+    setNotice({ message: '', error: false });
+    try {
+      if (nextKey) {
+        unwrapRpcResult(await rpcRef.current(WEIXIN_ENDPOINTS.setJevKey, { apiKey: nextKey }));
+      }
+      unwrapRpcResult(await rpcRef.current(WEIXIN_ENDPOINTS.setRouterSettings, { endpoint: nextEndpoint }));
+      setApiKey('');
+      setTestResult(null);
+      await load();
+      setNotice({ message: '智能切换设置已保存。', error: false });
+    } catch (error) {
+      setNotice({ message: localizeText(error?.message || '无法保存智能切换设置，请重试。'), error: true });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = async (event) => {
+    const next = event.target.checked === true;
+    if (saving || loading) return;
+    setEnabled(next);
+    setSaving(true);
+    setNotice({ message: '', error: false });
+    try {
+      unwrapRpcResult(await rpcRef.current(WEIXIN_ENDPOINTS.setRouterSettings, { enabled: next }));
+      setStatus((current) => ({ ...current, enabled: next }));
+      setNotice({ message: next ? '智能路由已开启。' : '智能路由已关闭。', error: false });
+    } catch (error) {
+      setEnabled(!next);
+      setNotice({ message: localizeText(error?.message || '无法保存智能切换设置，请重试。'), error: true });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const test = async () => {
+    if (testing || saving) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      setTestResult(normalizeJevTest(unwrapRpcResult(await rpcRef.current(WEIXIN_ENDPOINTS.testJev, {}))));
+    } catch (error) {
+      setTestResult({ state: 'unreachable' });
+      setNotice({ message: localizeText(error?.message || '无法测试 Jev 服务，请重试。'), error: true });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const busy = loading || saving;
+  const tone = jevTestTone(testResult);
+  return h('section', { className: 'dxw-page dxw-jevPage', 'aria-label': '智能切换设置' },
+    h('header', { className: 'dxw-jevHeader' },
+      h('span', { className: 'dxw-eyebrow' }, '会话路由'),
+      h('h2', null, '智能切换设置'),
+      h('p', null, '用 Jev 判断一条微信消息是延续当前话题、切回已有会话，还是新开会话。开启后，普通文字消息才会进入判断。')),
+    h('div', { className: 'dxw-card dxw-jevCard' },
+      h('div', { className: 'dxw-cardBody' },
+        h('div', { className: 'dxw-jevSwitchRow' },
+          h('div', null,
+            h('h3', null, '智能路由'),
+            h('p', { className: 'dxw-jevHint' }, '开启后，Jev 会先判断消息是否要切换会话；命令、图片和文件不进入判断。')),
+          h('label', { className: 'dxw-switch' },
+            h('input', {
+              type: 'checkbox', role: 'switch', 'aria-label': '智能路由',
+              checked: enabled, disabled: busy, onChange: toggle,
+            }),
+            h('span', { className: 'dxw-switchTrack', 'aria-hidden': 'true' },
+              h('span', { className: 'dxw-switchThumb' })))),
+        !loading && !status.classifyConfigured
+          ? h('p', { className: 'dxw-jevWarning' },
+              'Host 尚未配置 sessionRouter.classifyEntry，开启开关后也不会执行路由。')
+          : null)),
+    h('form', { className: 'dxw-card dxw-jevCard', onSubmit: save },
+      h('div', { className: 'dxw-cardBody' },
+        h('h3', null, 'Jev 模型配置'),
+        h('p', { className: 'dxw-jevHint' }, '填写 Jev 服务地址与 API Key。密钥只保存在本机 Host，页面仅显示尾号。'),
+        h('label', { className: 'dxw-jevLabel', htmlFor: 'dxw-jev-endpoint' }, 'Jev 模型端点'),
+        h('input', {
+          id: 'dxw-jev-endpoint', className: 'dxw-input dxw-jevInput',
+          name: 'endpoint', type: 'url', value: endpoint, required: true,
+          maxLength: 2048, disabled: busy, placeholder: 'https://api.typesafe.ai/v1/systemone',
+          onChange: (event) => setEndpoint(event.target.value),
+        }),
+        h('p', { className: 'dxw-jevKeyState' },
+          status.hasApiKey
+            ? h(React.Fragment, null, '已保存：', h('code', null, status.apiKeyPreview || '••••'))
+            : '尚未保存 API Key'),
+        h('label', { className: 'dxw-jevLabel', htmlFor: 'dxw-jev-key' }, 'TypeSafe Jev API Key'),
+        h('input', {
+          id: 'dxw-jev-key', className: 'dxw-input dxw-jevInput',
+          name: 'apiKey', type: 'password', autoComplete: 'new-password',
+          maxLength: 1024, disabled: busy, value: apiKey,
+          placeholder: status.hasApiKey ? '输入新的 API Key 以替换' : '输入 API Key',
+          onChange: (event) => setApiKey(event.target.value),
+        }),
+        h('div', { className: 'dxw-jevFooter' },
+          h('button', {
+            className: 'dxw-button', 'data-kind': 'primary', type: 'submit', disabled: busy,
+          }, loading ? '正在读取…' : saving ? '正在保存…' : '保存设置'),
+          h('button', {
+            className: 'dxw-button', type: 'button',
+            disabled: busy || testing || !status.hasApiKey,
+            onClick: test,
+          }, testing ? '正在测试…' : '测试连接'),
+          h('div', {
+            className: 'dxw-jevStatus', 'data-tone': tone,
+            role: 'status', 'aria-live': 'polite',
+          },
+          h('span', { className: 'dxw-dot', 'data-tone': tone === 'off' ? undefined : tone }),
+          h('span', null, jevTestText(testResult, status)))),
+        h('p', {
+          className: 'dxw-jevNotice', role: 'status', 'aria-live': 'polite',
+          'data-error': notice.error,
+        }, notice.message))));
 }
 
 export function WeixinSettingsTab({ rpcCall }) {

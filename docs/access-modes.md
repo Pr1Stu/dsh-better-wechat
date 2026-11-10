@@ -1,5 +1,9 @@
-# Access modes
+# Weixin access policy
 
-Each Telegram bot has its own access-mode control on its bot card. Existing and newly connected bots both default to **Compatible mode**: DMs receive replies, while group messages require a mention of or reply to the bot. Restrictions apply only after explicitly switching that bot to **Safe mode (private-chat allowlist)**. Safe mode ignores every group message and admits only numeric User IDs in that bot's allowlist. Enter one ID per line. Switching back to Compatible mode retains the allowlist without enforcing it, so it is available when Safe mode is enabled again. An empty allowlist in Safe mode rejects all inbound messages for that bot.
+The Weixin settings page exposes access policy for direct messages only. The group section is disabled because this adapter currently accepts private chats only.
 
-Each WhatsApp bot also has its own access mode. Existing bots migrate to **Only me**, which is also the default for newly linked bots and accepts only self-chat messages from the linked account. **Selected contacts** additionally accepts direct messages from allowlisted phone numbers and ignores groups. Enter one number with its country or region code per line; a leading `+` is optional. **Open responses** accepts all direct messages, group messages sent by the linked account, and mentions of or replies to that account from other group members; this also lets an owner-only group act as a separate conversation. Switching modes retains the allowlist. An empty Selected contacts allowlist behaves like Only me, and rejected messages are ignored silently.
+- **Open** lets any Weixin user who can message the bot use it. Command execution can be restricted separately.
+- **Allowlist** accepts only the listed Weixin user IDs. An empty list denies everyone.
+- In Open mode, per-user command overrides can grant or deny commands without changing who may send ordinary messages.
+
+The policy is stored per bot by the DSH Host. A policy change does not grant or bypass any DSH Host permission, workspace boundary, tool approval or sandbox rule.

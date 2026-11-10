@@ -521,7 +521,7 @@ async function runGo(state, harness, key, n, { signal, askText = null }) {
       n: label,
       title: fresh?.title || t('无标题'),
       age: formatAge(fresh?.lastSeenAt),
-    }), typeof askText === 'string' && askText ? { askText } : {});
+    }), { switched: true, ...(typeof askText === 'string' && askText ? { askText } : {}) });
   } catch (error) {
     return commandResult(goErrorMessage(error, n));
   }
@@ -551,7 +551,7 @@ async function runStep(state, harness, key, direction, { signal, askText = null 
     const markers = await computeRingMarkers(state, harness, key, { signal });
     const label = renderSessionNumber(entry, markers);
     return commandResult(t('已切换到会话 {n}（{title}）。', { n: label, title: entry.title || t('无标题') }),
-      typeof askText === 'string' && askText ? { askText } : {});
+      { switched: true, ...(typeof askText === 'string' && askText ? { askText } : {}) });
   } catch (error) {
     return commandResult(goErrorMessage(error, target.n));
   }
@@ -995,5 +995,5 @@ export async function runSessionNavTextCommand(text, harness, state, key, option
     const message = t('当前渠道不支持发送文件。');
     return { handled: true, message, messages: splitWorkspaceCommandMessage(message) };
   }
-  return { handled: true, message: result.message, messages: result.messages, askText: result.askText };
+  return { handled: true, message: result.message, messages: result.messages, askText: result.askText, ...(result.switched ? { switched: true } : {}) };
 }

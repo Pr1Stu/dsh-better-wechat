@@ -17,6 +17,39 @@ const CSS = String.raw`
   box-sizing: border-box;
 }
 .dxw-page *, .dxw-page *::before, .dxw-page *::after { box-sizing: border-box; }
+.dxw-jevPage { max-width: 680px; gap: 20px; }
+.dxw-jevSwitchRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.dxw-jevSwitchRow h3 { margin: 0 0 6px; font-size: 16px; }
+.dxw-jevWarning { margin: 14px 0 0; color: var(--dxw-warning); font-size: 13px; line-height: 1.6; }
+.dxw-switch { position: relative; display: inline-flex; align-items: center; flex: none; width: 44px; height: 26px; cursor: pointer; }
+.dxw-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.dxw-switchTrack { position: relative; display: block; width: 44px; height: 26px; border-radius: 999px; background: #c9ced6; transition: background .15s ease; }
+.dxw-switchThumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 1px 2px rgb(31 35 41 / 22%); transition: transform .15s ease; }
+.dxw-switch input:checked + .dxw-switchTrack { background: var(--dxw-accent); }
+.dxw-switch input:checked + .dxw-switchTrack .dxw-switchThumb { transform: translateX(18px); }
+.dxw-switch input:focus-visible + .dxw-switchTrack { outline: 2px solid color-mix(in srgb, var(--dxw-accent) 70%, white); outline-offset: 2px; }
+.dxw-switch input:disabled { cursor: not-allowed; }
+.dxw-switch input:disabled + .dxw-switchTrack { opacity: .55; }
+.dxw-jevKeyState { margin: 8px 0 0; color: var(--dsw-alias-label-secondary, #646a73); font-size: 13px; }
+.dxw-jevKeyState code { padding: 1px 5px; border-radius: 5px; color: var(--dsw-alias-label-primary, #1f2329); background: var(--dsw-alias-bg-module-platform, #f2f3f5); font: inherit; font-variant-numeric: tabular-nums; }
+.dxw-jevStatus { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--dsw-alias-label-secondary, #646a73); font-size: 13px; }
+.dxw-jevStatus[data-tone="success"] { color: var(--dxw-success); }
+.dxw-jevStatus[data-tone="warning"] { color: var(--dxw-warning); }
+.dxw-jevStatus[data-tone="error"] { color: var(--dxw-error); }
+.dxw-simBrand { width: 56px; height: 56px; display: grid; place-items: center; margin-top: 16px; border-radius: 14px; color: white; background: linear-gradient(145deg, #0ea5a4, #5e6ad2); }
+.dxw-simBrand svg { width: 34px; height: 34px; }
+.dxw-simAddress { display: block; width: fit-content; max-width: 100%; margin: 0 0 16px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2, #e5e6eb); border-radius: 7px; color: var(--dsw-alias-label-primary, #1f2329); background: var(--dsw-alias-bg-module-platform, #f2f3f5); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.dxw-simCommand { margin: 12px 0; padding: 12px 14px; border-radius: 8px; color: var(--dsw-alias-label-primary, #1f2329); background: var(--dsw-alias-bg-module-platform, #f2f3f5); font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+.dxw-jevHeader h2 { margin: 0 0 8px; font-size: 22px; line-height: 1.3; }
+.dxw-jevHeader p, .dxw-jevHint { margin: 0; color: var(--dsw-alias-label-secondary, #646a73); font-size: 13px; line-height: 1.6; }
+.dxw-jevCard h3 { margin-bottom: 6px; font-size: 16px; }
+.dxw-jevLabel { display: block; margin: 22px 0 8px; font-size: 13px; font-weight: 600; }
+.dxw-jevInput { width: 100%; max-width: 480px; font-size: 14px; letter-spacing: normal; text-align: left; }
+.dxw-jevFooter { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.dxw-jevFooter p { color: var(--dxw-success); font-size: 13px; }
+.dxw-jevFooter p[data-error="true"] { color: var(--dxw-error); }
+.dxw-jevNotice { flex-basis: 100%; margin: 0; }
+
 .dxw-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .dxw-heading h2, .dxw-heading p, .dxw-card h3, .dxw-card p { margin: 0; }
 .dxw-eyebrow { color: var(--dsw-alias-label-tertiary, #8f959e); font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 3px; }

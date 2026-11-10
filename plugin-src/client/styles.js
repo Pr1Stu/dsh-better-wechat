@@ -144,6 +144,10 @@ const CSS = String.raw`
 .dim-logoTelegram { color: white; background: #229ed9; }
 .dim-logoTelegram svg { width: 21px; height: 21px; }
 .dim-logoOffice { color: white; background: linear-gradient(145deg, #12213f, #3964fe); }
+.dim-logoSimWeixin { color: white; background: linear-gradient(145deg, #0ea5a4, #5e6ad2); }
+.dim-logoSimWeixin svg { width: 21px; height: 21px; }
+.dim-logoSwitch { color: white; background: linear-gradient(145deg, #5e6ad2, #8b5cf6); }
+.dim-logoSwitch svg { width: 21px; height: 21px; }
 .dim-logoOffice svg { width: 23px; height: 23px; }
 .dim-logoDiscord { color: white; background: #5865f2; }
 .dim-logoDiscord svg { width: 21px; height: 21px; }

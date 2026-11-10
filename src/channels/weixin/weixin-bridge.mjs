@@ -1,3 +1,4 @@
+import { setTimeout as wait } from 'node:timers/promises';
 import { BusyMessageDispatcher, canAutomaticallySteer } from '../shared/busy-message-dispatcher.mjs';
 import { SESSION_NAV_HELP_LINES } from '../shared/command-catalog.mjs';
 import { createDeferredDeliveryCoordinator, deferredOutcomeText } from '../shared/deferred-delivery-coordinator.mjs';
@@ -87,6 +88,27 @@ import {
 import { t } from '../shared/i18n.mjs';
 
 const INTERACTION_RESOLVED_TEXT = () => t('这个问题已在其他客户端处理，无需再次回答。');
+const NEW_TOPIC_NOTICES = [
+  '话头变了，已经切换到新话题啦。',
+  '这个话题单独聊，我开了个新会话。',
+  '已开启新话题，我们从这里开始。',
+];
+
+function routeNotice(route) {
+  if (route.action === 'new') {
+    if (route.recallFailed) return '没能接回旧话题，已开启新会话。';
+    return NEW_TOPIC_NOTICES[Math.floor(Math.random() * NEW_TOPIC_NOTICES.length)];
+  }
+  const title = route.title?.replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!title) return '之前聊过这个话题，已经接上啦。';
+  const notices = [
+    `之前聊过这个：【${title}】，已经接上啦。`,
+    `找到之前的【${title}】了，接着聊。`,
+    `已回到【${title}】，从上次聊到的地方继续。`,
+  ];
+  return notices[Math.floor(Math.random() * notices.length)];
+}
+
 const DEFAULT_TYPING_KEEPALIVE_MS = 5_000;
 const TYPING_RETRY_DELAY_MS = 60_000;
 const WEIXIN_SEND_DIAGNOSTIC = Symbol('weixin-send-diagnostic');
@@ -326,6 +348,8 @@ export class WeixinHarnessBridge {
   #replyTimeoutMs;
   #maxMessageChars;
   #typingKeepaliveMs;
+  #sessionRouter;
+  #skipRoute = new Set();
   #signal;
   #queues = new Map();
   #busyMessages = new BusyMessageDispatcher();
@@ -355,6 +379,7 @@ export class WeixinHarnessBridge {
     state,
     contextEnhancement,
     accessPolicy,
+    sessionRouter,
     status = createWeixinBridgeStatus(),
     logger = console,
     replyTimeoutMs = 600_000,
@@ -376,6 +401,7 @@ export class WeixinHarnessBridge {
     this.#state = state;
     this.#contextEnhancement = contextEnhancement;
     this.#accessPolicy = accessPolicy;
+    this.#sessionRouter = sessionRouter;
     this.#status = status;
     this.#logger = logger;
     this.#replyTimeoutMs = replyTimeoutMs;
@@ -790,6 +816,14 @@ export class WeixinHarnessBridge {
     this.#status.lastError = null;
   }
 
+  async #recordRoutedSession(key, sessionId) {
+    try {
+      await this.#sessionRouter?.created?.(key, sessionId);
+    } catch (error) {
+      this.#logger.warn?.('[dsh-weixin] unable to record session provenance:', error);
+    }
+  }
+
   async #process(message, key, {
     alreadyRecorded = false,
     preparedMessage,
@@ -834,6 +868,10 @@ export class WeixinHarnessBridge {
       }
       if (!hasImages && !hasFiles && isNewCommand(text)) {
         const created = await createConversationSession({ state: this.#state, harness: this.#harness, key, title: newCommandTitle(text) });
+        if (this.#sessionRouter && !created.failed) {
+          this.#skipRoute.add(key);
+          await this.#recordRoutedSession(key, created.sessionId);
+        }
         await this.#send(sender, created.failed ? t('暂时无法创建新会话，请稍后重试。') : t('已开启新会话。请发送你的问题。'), contextToken, runId);
         await this.#state.markSeen(messageId);
         return;
@@ -843,6 +881,7 @@ export class WeixinHarnessBridge {
           signal: this.#signal,
         });
         if (nav) {
+          if (this.#sessionRouter && nav.switched) this.#skipRoute.add(key);
           for (const reply of nav.messages ?? [nav.message]) {
             await this.#send(sender, reply, contextToken, runId);
           }
@@ -918,8 +957,42 @@ export class WeixinHarnessBridge {
 
       let answer;
       let artifacts = [];
+      let switchedRoute;
+      let createdSessionId;
       await this.#startTyping(sender, contextToken);
       try {
+        if (this.#sessionRouter && !hasImages && !hasFiles && !hasReply
+          && !batchSubmission && !command.startsWith('/')) {
+          while (await this.#deferred.hasPending(key)) {
+            await wait(500, undefined, { signal: this.#signal });
+          }
+          const skip = this.#skipRoute.delete(key);
+          const current = this.#state.sessionFor(key);
+          const dsBot = await this.#harness.resolveDsBotSession?.(key);
+          const workspace = await this.#harness.resolveConversationWorkspace?.(key);
+          const decision = skip || dsBot ? { action: 'keep' }
+            : await this.#sessionRouter({ text, key, current, signal: this.#signal });
+          if (current === this.#state.sessionFor(key)
+            && workspace === await this.#harness.resolveConversationWorkspace?.(key)) {
+            if (decision.action === 'resume') {
+              try {
+                const result = await this.#harness.bindWorkspaceSession(key, decision.sessionId, { expectedWorkspace: workspace });
+                if (result?.archived || this.#state.sessionFor(key) !== decision.sessionId) {
+                  throw new Error('Recall target is no longer bindable');
+                }
+                switchedRoute = decision;
+              } catch {
+                decision.action = 'new';
+                decision.recallFailed = true;
+              }
+            }
+            if (decision.action === 'new' && current === this.#state.sessionFor(key)) {
+              await this.#state.clearSession(key);
+              if (decision.skipNextRoute) this.#skipRoute.add(key);
+              switchedRoute = decision;
+            }
+          }
+        }
         let content = hasImages || hasReply
           ? await promptContentForInboundMessage(promptMessage, { signal: this.#signal, deferImages: true })
           : undefined;
@@ -936,6 +1009,20 @@ export class WeixinHarnessBridge {
         await this.#state.markSeen(messageId);
         promptRecorded = true;
         ({ answer, artifacts = [] } = await askInWorkspaceSession({
+          onSessionCreated: (id) => {
+            createdSessionId = id;
+            return this.#recordRoutedSession(key, id);
+          },
+          prepareContent: switchedRoute && (async ({ sessionId, content, text }) => {
+            const target = switchedRoute?.sessionId ?? createdSessionId;
+            if (switchedRoute && target === sessionId && this.#state.sessionFor(key) === sessionId) {
+              const notice = routeNotice(switchedRoute);
+              switchedRoute = undefined;
+              await this.#send(sender, notice, contextToken, runId, { stopTyping: false })
+                .catch((error) => this.#logger.warn?.('[dsh-weixin] unable to deliver route notice:', error));
+            }
+            return content ?? text;
+          }),
           onNotice: (notice) => this.#send(sender, notice, contextToken, runId, { stopTyping: false }),
           deferredDelivery: () => ({ coordinator: this.#deferred, target: { toUserId: sender } }),
           harness: this.#harness,

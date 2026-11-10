@@ -1,3 +1,10 @@
+import { jevKeyPreview, SET_JEV_KEY, validJevKey } from './jev-key.mjs';
+import {
+  ROUTER_STATUS_ENDPOINT,
+  SET_ROUTER_SETTINGS_ENDPOINT,
+  TEST_JEV_SERVICE_ENDPOINT,
+  validJevEndpoint,
+} from './router-settings.mjs';
 import { SET_MESSAGE_MODE_ENDPOINT, validMessageModePayload } from '../../../../src/channels/shared/message-mode.mjs';
 import { SET_ALIAS_ENDPOINT, validAliasPayload } from '../shared/bot-alias-rpc.mjs';
 import { registerManagementRpc } from '../../../management-rpc.mjs';
@@ -24,6 +31,10 @@ import {
 export const WEIXIN_RPC_CHANNEL = '/weixin';
 export const WEIXIN_ENDPOINTS = Object.freeze({
   status: 'connection.status',
+  setJevKey: SET_JEV_KEY,
+  jevStatus: ROUTER_STATUS_ENDPOINT,
+  setRouterSettings: SET_ROUTER_SETTINGS_ENDPOINT,
+  testJev: TEST_JEV_SERVICE_ENDPOINT,
   beginProvisioning: 'provision.begin',
   pollProvisioning: 'provision.poll',
   submitVerification: 'provision.verify',
@@ -54,6 +65,21 @@ function validId(value) {
 
 function payloadFailure(endpoint, payload) {
   if (!isRecord(payload)) return 'Payload must be an object.';
+  if (endpoint === SET_JEV_KEY) {
+    return exactKeys(payload, ['apiKey']) && validJevKey(payload.apiKey) ? null : 'Invalid Jev API key.';
+  }
+  if (endpoint === ROUTER_STATUS_ENDPOINT || endpoint === TEST_JEV_SERVICE_ENDPOINT) {
+    return exactKeys(payload, []) ? null : `${endpoint} does not accept fields.`;
+  }
+  if (endpoint === SET_ROUTER_SETTINGS_ENDPOINT) {
+    const keys = Object.keys(payload);
+    return keys.length > 0
+      && keys.every((key) => key === 'enabled' || key === 'endpoint')
+      && (payload.enabled === undefined || typeof payload.enabled === 'boolean')
+      && (payload.endpoint === undefined || validJevEndpoint(payload.endpoint))
+      ? null
+      : 'Invalid smart routing settings.';
+  }
   if (endpoint === WEIXIN_ENDPOINTS.status) {
     return exactKeys(payload, []) ? null : 'connection.status does not accept fields.';
   }
@@ -163,7 +189,7 @@ function assertController(controller) {
   }
 }
 
-export function createWeixinRpcHandler(controller, { encodeQr = qrDataUrl, logger = console, diagnostics = createWeixinDiagnostics({ logger }) } = {}) {
+export function createWeixinRpcHandler(controller, { encodeQr = qrDataUrl, logger = console, diagnostics = createWeixinDiagnostics({ logger }), setJevKey, routerSettings, readJevKey, testJev, routerConfigured = false } = {}) {
   assertController(controller);
   const qrCache = new Map();
   const cachedEncode = (url) => {
@@ -185,6 +211,74 @@ export function createWeixinRpcHandler(controller, { encodeQr = qrDataUrl, logge
     const invalid = payloadFailure(endpoint, payload);
     if (invalid) return badRequest(invalid);
 
+    if (endpoint === SET_JEV_KEY) {
+      try {
+        await setJevKey(payload.apiKey);
+        return { ok: true, value: { saved: true } };
+      } catch (error) {
+        const reason = typeof error?.code === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(error.code)
+          ? error.code
+          : typeof error?.name === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(error.name)
+            ? error.name : 'unknown';
+        logger.warn?.(`[dsh-weixin] Jev API Key save failed (${reason})`);
+        return { ok: false, error: {
+          code: 'jev-key-save-failed', message: '无法保存 Jev API Key，请重试。',
+        } };
+      }
+    }
+    if (endpoint === ROUTER_STATUS_ENDPOINT) {
+      if (!routerSettings) return { ok: false, error: {
+        code: 'jev-settings-unavailable', message: '智能切换设置不可用。',
+      } };
+      let apiKey = '';
+      try {
+        apiKey = await readJevKey?.() ?? '';
+      } catch (error) {
+        const reason = typeof error?.code === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(error.code)
+          ? error.code : 'unknown';
+        logger.warn?.(`[dsh-weixin] Jev API Key read failed (${reason})`);
+      }
+      const settings = routerSettings.get();
+      return { ok: true, value: {
+        enabled: settings.enabled,
+        endpoint: settings.endpoint,
+        classifyConfigured: routerConfigured === true,
+        hasApiKey: Boolean(apiKey),
+        apiKeyPreview: jevKeyPreview(apiKey),
+      } };
+    }
+    if (endpoint === SET_ROUTER_SETTINGS_ENDPOINT) {
+      if (!routerSettings) return { ok: false, error: {
+        code: 'jev-settings-unavailable', message: '智能切换设置不可用。',
+      } };
+      try {
+        const value = await routerSettings.update(payload);
+        return { ok: true, value: { enabled: value.enabled, endpoint: value.endpoint } };
+      } catch (error) {
+        const reason = typeof error?.code === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(error.code)
+          ? error.code : 'unknown';
+        logger.warn?.(`[dsh-weixin] Jev settings save failed (${reason})`);
+        return { ok: false, error: {
+          code: 'jev-settings-save-failed', message: '无法保存智能切换设置，请重试。',
+        } };
+      }
+    }
+    if (endpoint === TEST_JEV_SERVICE_ENDPOINT) {
+      if (!testJev) return { ok: false, error: {
+        code: 'jev-test-unavailable', message: 'Jev 服务测试不可用。',
+      } };
+      try {
+        const value = await testJev(signal);
+        if (signal?.aborted) return cancelled();
+        return { ok: true, value };
+      } catch (error) {
+        if (signal?.aborted) return cancelled();
+        logger.warn?.('[dsh-weixin] Jev service test failed');
+        return { ok: false, error: {
+          code: 'jev-test-failed', message: '无法测试 Jev 服务，请重试。',
+        } };
+      }
+    }
     try {
       let value;
       if (endpoint === WEIXIN_ENDPOINTS.status) {
