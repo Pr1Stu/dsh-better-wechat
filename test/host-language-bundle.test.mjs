@@ -10,10 +10,7 @@ import { createImHostPlugin } from '../lib/index.js';
 async function startHost(t, language) {
   const dshHome = await mkdtemp(join(tmpdir(), 'dsh-im-bundled-language-'));
   t.after(() => rm(dshHome, { recursive: true, force: true }));
-  const channels = [
-    'Feishu', 'Weixin', 'Dingtalk', 'Wecom', 'WecomApp', 'Qq', 'Slack',
-    'Telegram', 'Discord', 'Whatsapp', 'IMessage', 'Email', 'Matrix', 'Office',
-  ];
+  const channels = ['Weixin'];
   const internals = Object.fromEntries(channels.map((channel) => [
     `apply${channel}`, async () => {},
   ]));
@@ -25,7 +22,7 @@ async function startHost(t, language) {
   let controller;
   let languageAtChannelStart;
   internals.installHostLanguageRpc = (_ctx, value) => { controller = value; };
-  internals.applyTelegram = async () => { languageAtChannelStart = controller.language(); };
+  internals.applyWeixin = async () => { languageAtChannelStart = controller.language(); };
   const errors = [];
   await createImHostPlugin(internals).apply({
     connection: { fetch: { register: () => () => {} } },

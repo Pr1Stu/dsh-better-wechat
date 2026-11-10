@@ -6,12 +6,7 @@ import { Context } from '@deepseek-ai/cordis';
 import { setImHostLanguage } from '../src/channels/shared/i18n.mjs';
 import { createImHostPlugin, inject, name } from '../plugin-src/host/index.mjs';
 
-const NO_CHANNELS = Object.freeze({
-  applyFeishu: async () => {}, applyWeixin: async () => {}, applyDingtalk: async () => {},
-  applyWecom: async () => {}, applyWecomApp: async () => {}, applyQq: async () => {},
-  applySlack: async () => {}, applyDiscord: async () => {}, applyWhatsapp: async () => {},
-  applyIMessage: async () => {}, applyOffice: async () => {},
-});
+const NO_CHANNELS = Object.freeze({ applyWeixin: async () => {} });
 
 test('Host forwards its management authority to both general settings and updates', async () => {
   for (const rpcAuthority of [undefined, 'trusted-host', 'loopback']) {
@@ -55,13 +50,13 @@ test('Host resolves the bot message language before channels start and serves it
     installSidebarSettingsRpc: (_ctx, { config }) => {
       order.push(['sidebar-rpc', config.rpcAuthority, config.language]);
     },
-    applyTelegram: async () => { order.push(['telegram', resolved]); },
+    applyWeixin: async () => { order.push(['weixin', resolved]); },
   });
 
   await plugin.apply({ connection: { fetch: {} } }, {
     language: 'en',
     rpcAuthority: 'trusted-host',
-    telegram: {},
+    weixin: {},
   });
 
   assert.deepEqual(order[0], ['language', 'en']);
@@ -69,14 +64,14 @@ test('Host resolves the bot message language before channels start and serves it
     ['language-rpc', true, 'trusted-host']);
   assert.deepEqual(order.find(([kind]) => kind === 'sidebar-rpc'),
     ['sidebar-rpc', 'trusted-host', 'en']);
-  assert.deepEqual(order.find(([kind]) => kind === 'telegram'), ['telegram', true]);
+  assert.deepEqual(order.find(([kind]) => kind === 'weixin'), ['weixin', true]);
 });
 
 test('Host-provided describeConversation delegates through ctx.provide', async () => {
   let provided;
   const described = {
-    channel: 'telegram',
-    conversationKey: 'group:chat-1:thread-2',
+    channel: 'weixin',
+    conversationKey: 'direct:wx-user',
     senderId: 'user-1',
   };
   const deliveryService = {
@@ -89,7 +84,7 @@ test('Host-provided describeConversation delegates through ctx.provide', async (
     ...NO_CHANNELS,
     createDeliveryService: () => deliveryService,
     installHostLanguage: () => ({ ready: Promise.resolve() }),
-    applyTelegram: async () => {},
+    applyWeixin: async () => {},
     installUpdateRpc: () => {}, installInboundTtlRpc: () => {}, installDeliverySyncRpc: () => {},
     installDeliveryRpc: () => {}, installDeliveryHttp: () => {},
     installSessionSyncCoordinator: () => {},
@@ -103,38 +98,19 @@ test('Host-provided describeConversation delegates through ctx.provide', async (
   assert.deepEqual(await provided.describeConversation('session-1'), described);
 });
 
-test('Host composes IM channels and the AI Office connector inside one plugin context', async () => {
+test('Host composes the Weixin adapter inside one plugin context', async () => {
   const calls = [];
   const deliveryService = { marker: 'shared-delivery-service' };
   const plugin = createImHostPlugin({
     createDeliveryService: () => deliveryService,
-    applyFeishu: async (ctx, config) => calls.push(['feishu', ctx, config]),
     applyWeixin: async (ctx, config) => calls.push(['weixin', ctx, config]),
-    applyDingtalk: async (ctx, config) => calls.push(['dingtalk', ctx, config]),
-    applyWecom: async (ctx, config) => calls.push(['wecom', ctx, config]),
-    applyQq: async (ctx, config) => calls.push(['qq', ctx, config]),
-    applySlack: async (ctx, config) => calls.push(['slack', ctx, config]),
-    applyTelegram: async (ctx, config) => calls.push(['telegram', ctx, config]),
-    applyDiscord: async (ctx, config) => calls.push(['discord', ctx, config]),
-    applyWhatsapp: async (ctx, config) => calls.push(['whatsapp', ctx, config]),
-    applyIMessage: async (ctx, config) => calls.push(['imessage', ctx, config]),
-    applyOffice: async (ctx, config) => calls.push(['office', ctx, config]),
+    applyFeishu: async () => assert.fail('removed adapter must not start'),
   });
   const ctx = { marker: 'shared-context' };
   const config = {
     rpcAuthority: 'trusted-host',
     groupByAgentPreset: true,
-    feishu: { domain: 'feishu', groupByAgentPreset: false },
     weixin: { timeout: 30 },
-    dingtalk: { replyTimeoutMs: 60_000 },
-    wecom: { replyTimeoutMs: 60_000 },
-    qq: { replyTimeoutMs: 60_000 },
-    slack: { replyTimeoutMs: 60_000 },
-    telegram: { replyTimeoutMs: 60_000 },
-    discord: { replyTimeoutMs: 60_000 },
-    whatsapp: { replyTimeoutMs: 60_000 },
-    imessage: { replyTimeoutMs: 60_000 },
-    office: { heartbeatSeconds: 30 },
   };
 
   await plugin.apply(ctx, config);
@@ -144,19 +120,11 @@ test('Host composes IM channels and the AI Office connector inside one plugin co
     'connection',
     'credentials',
     'typertGateway',
+    'sessionQuery',
+    'llm',
   ]);
   assert.deepEqual(calls, [
-    ['feishu', ctx, { groupByAgentPreset: true, ...config.feishu, rpcAuthority: 'trusted-host', deliveryService }],
     ['weixin', ctx, { groupByAgentPreset: true, ...config.weixin, rpcAuthority: 'trusted-host', deliveryService }],
-    ['dingtalk', ctx, { groupByAgentPreset: true, ...config.dingtalk, rpcAuthority: 'trusted-host', deliveryService }],
-    ['wecom', ctx, { groupByAgentPreset: true, ...config.wecom, rpcAuthority: 'trusted-host', deliveryService }],
-    ['qq', ctx, { groupByAgentPreset: true, ...config.qq, rpcAuthority: 'trusted-host', deliveryService }],
-    ['slack', ctx, { groupByAgentPreset: true, ...config.slack, rpcAuthority: 'trusted-host', deliveryService }],
-    ['telegram', ctx, { groupByAgentPreset: true, ...config.telegram, rpcAuthority: 'trusted-host', deliveryService }],
-    ['discord', ctx, { groupByAgentPreset: true, ...config.discord, rpcAuthority: 'trusted-host', deliveryService }],
-    ['whatsapp', ctx, { groupByAgentPreset: true, ...config.whatsapp, rpcAuthority: 'trusted-host', deliveryService }],
-    ['imessage', ctx, { groupByAgentPreset: true, ...config.imessage, rpcAuthority: 'trusted-host', deliveryService }],
-    ['office', ctx, { groupByAgentPreset: true, ...config.office, rpcAuthority: 'trusted-host' }],
   ]);
 });
 
@@ -168,18 +136,18 @@ test('Host provides #65 and installs #84 with the same delivery service', async 
   const deliveryService = {
     async describeConversation(sessionId) {
       described.push(sessionId);
-      return { conversationKey: 'group:1', senderId: 'x' };
+      return { conversationKey: 'direct:wx-user', senderId: 'x' };
     },
     async historyChecked(...args) { historyReads.push(args); return {events:[],hasMore:false}; },
     async send(...args) { sent.push(args); return { sent: true }; },
     async listTargets(botId) {
-      return { botId, channel: 'telegram', targets: [{ targetId: 'target' }] };
+      return { botId, channel: 'weixin', targets: [{ targetId: 'target' }] };
     },
     async createTarget(...args) {
       created.push(args);
       return { targetId: args[1].targetId };
     },
-    async listBots() { return [{ botId: 'bot_one', channel: 'telegram' }]; },
+    async listBots() { return [{ botId: 'bot_one', channel: 'weixin' }]; },
   };
   const provided = [];
   const rpc = [];
@@ -219,7 +187,7 @@ test('Host provides #65 and installs #84 with the same delivery service', async 
     { targetId: 'new-target' },
   );
   assert.deepEqual(created, [['bot_one', { targetId: 'new-target', kind: 'chat', route: { chatId: '123456789' } }]]);
-  assert.deepEqual(await provided[0][1].listBots(), [{ botId: 'bot_one', channel: 'telegram' }]);
+  assert.deepEqual(await provided[0][1].listBots(), [{ botId: 'bot_one', channel: 'weixin' }]);
   assert.deepEqual(await provided[0][1].send('bot_one', 'target', 'hello'), { sent: true });
   assert.deepEqual(sent, [['bot_one', 'target', 'hello', undefined]]);
   assert.deepEqual(await provided[0][1].historyChecked('bot_one', {messageId:'anchor'}, {scope:'thread',limit:1}, {}), {events:[],hasMore:false});
@@ -228,7 +196,7 @@ test('Host provides #65 and installs #84 with the same delivery service', async 
   // constructed: a wrapper defined outside `apply()` used to throw
   // `ReferenceError: deliveryService is not defined` here.
   assert.deepEqual(await provided[0][1].describeConversation('session-1'), {
-    conversationKey: 'group:1', senderId: 'x',
+    conversationKey: 'direct:wx-user', senderId: 'x',
   });
   assert.deepEqual(described, ['session-1']);
   assert.equal(logLines.filter((line) => line.includes('describeConversation')).length, 1);
@@ -247,6 +215,8 @@ test('#65 activates a real Cordis consumer without crossing the Connection RPC',
   });
   ctx.provide('credentials', {});
   ctx.provide('typertGateway', { stream() {} });
+  ctx.provide('sessionQuery', {});
+  ctx.provide('llm', {});
   ctx.provide('sessionController', {});
   ctx.provide('workspaceController', {});
 
@@ -325,6 +295,8 @@ test('Host installs channel prefixes through the real Cordis sessions dependency
   ctx.provide('connection', { fetch: { register: () => () => {} } });
   ctx.provide('credentials', {});
   ctx.provide('typertGateway', { stream() {} });
+  ctx.provide('sessionQuery', {});
+  ctx.provide('llm', {});
   ctx.provide('sessionController', {});
   ctx.provide('workspaceController', {});
   const data = { title: '自动标题', messageSeqs: [0], source: { kind: 'fallback' } };
@@ -378,65 +350,24 @@ test('Session title injection returns a valid Cordis startup effect', async () =
   for (const dispose of effects.reverse()) dispose?.();
 });
 
-const CHANNELS = [
-  ['feishu', 'applyFeishu'],
-  ['weixin', 'applyWeixin'],
-  ['dingtalk', 'applyDingtalk'],
-  ['wecom', 'applyWecom'],
-  ['wecomApp', 'applyWecomApp'],
-  ['qq', 'applyQq'],
-  ['slack', 'applySlack'],
-  ['telegram', 'applyTelegram'],
-  ['discord', 'applyDiscord'],
-  ['whatsapp', 'applyWhatsapp'],
-  ['imessage', 'applyIMessage'],
-  ['email', 'applyEmail'],
-  ['matrix', 'applyMatrix'],
-  ['office', 'applyOffice'],
-];
+const CHANNELS = [['weixin', 'applyWeixin']];
 
 function activationFixture(failedChannels) {
   const calls = [];
-  const events = [];
   const errors = [];
-  const failures = new Map();
   const internals = Object.fromEntries(CHANNELS.map(([channel, applyName]) => [
     applyName,
     async () => {
       calls.push(channel);
-      events.push(`${channel}:start`);
       await new Promise((resolve) => setImmediate(resolve));
-      if (failedChannels.has(channel)) {
-        const error = new Error(`${channel} unavailable`);
-        failures.set(channel, error);
-        events.push(`${channel}:failed`);
-        throw error;
-      }
-      events.push(`${channel}:end`);
+      if (failedChannels.has(channel)) throw new Error(`${channel} unavailable`);
     },
   ]));
   const ctx = { logger: { error: (...args) => errors.push(args) } };
-  return { plugin: createImHostPlugin(internals), ctx, calls, events, errors, failures };
+  return { plugin: createImHostPlugin(internals), ctx, calls, errors };
 }
 
-test('Host starts all channels before awaiting them and isolates activation failures', async () => {
-  for (const [failedChannel] of CHANNELS) {
-    const fixture = activationFixture(new Set([failedChannel]));
-
-    await fixture.plugin.apply(fixture.ctx, {});
-
-    assert.deepEqual(fixture.calls, CHANNELS.map(([channel]) => channel));
-    assert.deepEqual(fixture.events, [
-      ...CHANNELS.map(([channel]) => `${channel}:start`),
-      ...CHANNELS.map(([channel]) => `${channel}:${channel === failedChannel ? 'failed' : 'end'}`),
-    ]);
-    assert.equal(fixture.errors.length, 1);
-    assert.match(fixture.errors[0][0], new RegExp(`activate ${failedChannel}`));
-    assert.equal(fixture.errors[0][1], fixture.failures.get(failedChannel));
-  }
-});
-
-test('Host reports aggregate failure only after every channel was attempted', async () => {
+test('Host reports aggregate failure after Weixin activation was attempted', async () => {
   const fixture = activationFixture(new Set(CHANNELS.map(([channel]) => channel)));
 
   await assert.rejects(

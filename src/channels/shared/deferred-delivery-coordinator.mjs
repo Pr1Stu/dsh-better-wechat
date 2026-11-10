@@ -226,6 +226,9 @@ export function createDeferredDeliveryCoordinator({
         .map((entry) => enqueue(sessionId, () => process(entry.id, { urgent: true }))));
     },
     resume,
+    async hasPending(key) {
+      return enabled && (await registry.pendingForKey(key)).length > 0;
+    },
     async stop(key) {
       if (!enabled || activeSignal.aborted) return 'none';
       const entries = await registry.pendingForKey(key);

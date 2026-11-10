@@ -203,14 +203,10 @@ test('the shared bridge binds locally with its conversation key and never prompt
   assert.equal(seen.has('message-session-bind'), true);
 });
 
-test('all nine channel bridges advertise /session and pass their current conversation key', async () => {
+test('shared text and Weixin bridges advertise /session and pass their current conversation key', async () => {
   const bridgeFamilies = [
     ['../src/channels/shared/text-harness-bridge.mjs', 'conversationKey'],
     ['../src/channels/weixin/weixin-bridge.mjs', 'key'],
-    ['../src/channels/feishu/bridge.mjs', 'key'],
-    ['../src/channels/dingtalk/dingtalk-bridge.mjs', 'key'],
-    ['../src/channels/wecom/wecom-bridge.mjs', 'key'],
-    ['../src/channels/qq/qq-bridge.mjs', 'key'],
   ];
   for (const [file, key] of bridgeFamilies) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8');
@@ -227,26 +223,11 @@ test('all nine channel bridges advertise /session and pass their current convers
     );
   }
 
-  for (const file of [
-    '../src/channels/discord/discord-bridge.mjs',
-    '../src/channels/slack/slack-bridge.mjs',
-    '../src/channels/telegram/telegram-bridge.mjs',
-    '../src/channels/whatsapp/whatsapp-bridge.mjs',
-  ]) {
-    const source = await readFile(new URL(file, import.meta.url), 'utf8');
-    assert.match(source, /extends TextHarnessBridge/);
-  }
+  assert.match(await readFile(new URL('../src/channels/weixin/weixin-bridge.mjs', import.meta.url), 'utf8'), /runWorkspaceCommand/);
 });
 
-test('every non-text bridge lists the session-navigation commands in its help', async () => {
-  const files = [
-    '../src/channels/dingtalk/dingtalk-bridge.mjs',
-    '../src/channels/wecom/wecom-bridge.mjs',
-    '../src/channels/wecom-app/wecom-app-bridge.mjs',
-    '../src/channels/weixin/weixin-bridge.mjs',
-    '../src/channels/qq/qq-bridge.mjs',
-    '../src/channels/feishu/feishu-cards.mjs',
-  ];
+test('Weixin lists session-navigation commands in its help', async () => {
+  const files = ['../src/channels/weixin/weixin-bridge.mjs'];
   for (const file of files) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8');
     assert.match(source, /SESSION_NAV_HELP_LINES/, `${file} must list the shared nav help lines`);

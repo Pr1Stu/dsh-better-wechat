@@ -2862,3 +2862,38 @@ for (const line of ['/plan', '/goal pause']) {
     assert.deepEqual(sent, [COMMAND_PERMISSION_DENIED_MESSAGE]);
   });
 }
+
+test('Weixin routes after starting typing, sends a native topic notice and submits a redelivered message only once', async () => {
+  const fixture = stateFixture();
+  const key = 'p2p:owner-user';
+  fixture.sessions.set(key, 'current');
+  const events = [];
+  const bridge = new WeixinHarnessBridge({
+    api: {
+      getConfig: async () => ({ typingTicket: 'ticket' }),
+      sendTyping: async ({ status }) => events.push(`typing:${status}`),
+      sendText: async ({ text }) => { events.push(text); return { messageId: 'reply-id' }; },
+    },
+    baseUrl: 'https://ilinkai.weixin.qq.com/',
+    token: 'host-token',
+    ownerUserId: 'owner-user',
+    state: fixture.state,
+    sessionRouter: async ({ current }) => {
+      events.push(`route:${current}`);
+      return { action: 'resume', sessionId: 'older', title: '差旅报销' };
+    },
+    harness: {
+      bindWorkspaceSession: async (conversationKey, id) => fixture.sessions.set(conversationKey, id),
+      sessionExists: async () => true,
+      ask: async (id, prompt) => { events.push(`ask:${id}:${prompt}`); return '已处理'; },
+    },
+  });
+  const inbound = message('route-001', '继续报销流程');
+  await bridge.accept(inbound);
+  await bridge.accept(inbound);
+  assert.match(events[2], /【差旅报销】/);
+  assert.deepEqual(events.filter((_, index) => index !== 2),
+    ['typing:1', 'route:current', 'ask:older:继续报销流程', 'typing:2', '已处理']);
+  // The notice is an ordinary iLink text message, not a custom event.
+  assert.equal(events.filter((event) => event.startsWith('route:')).length, 1);
+});

@@ -175,7 +175,7 @@ export function availableCommandCatalog(catalog = SHARED_COMMAND_CATALOG, { supp
  * document that). Kept here so the non-text bridges cannot drift from /ls.
  */
 export const SESSION_NAV_HELP_LINES = Object.freeze([
-  '/ls 或 /list  列出本聊天使用过的会话（● 当前，←/→ 可前后切换，✕ 已失效；列表按聊天隔离，论坛群按话题）',
+  '/ls 或 /list  列出本微信私聊使用过的会话（● 当前，←/→ 可前后切换，✕ 已失效）',
   '/go 会话编号  切换到该会话（编号见 /ls）',
   '/prev  回到上一个会话',
   '/next  前进到下一个会话',

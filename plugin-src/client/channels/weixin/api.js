@@ -11,6 +11,10 @@ import { normalizeContextEnhancementConfig } from '../../../../src/channels/shar
 export const WEIXIN_RPC_CHANNEL = '/weixin';
 export const WEIXIN_ENDPOINTS = Object.freeze({
   status: 'connection.status',
+  setJevKey: 'router.jev-key.set',
+  jevStatus: 'router.status',
+  setRouterSettings: 'router.settings.set',
+  testJev: 'router.jev.test',
   beginProvisioning: 'provision.begin',
   pollProvisioning: 'provision.poll',
   submitVerification: 'provision.verify',

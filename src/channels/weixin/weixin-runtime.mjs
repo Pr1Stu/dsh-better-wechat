@@ -119,6 +119,7 @@ export class WeixinRuntime {
   #state;
   #contextEnhancement;
   #accessPolicy;
+  #sessionRouter;
   #logger;
   #diagnostics;
   #startContext = {};
@@ -139,6 +140,7 @@ export class WeixinRuntime {
     state,
     contextEnhancement,
     accessPolicy,
+    sessionRouter,
     logger = console,
     diagnostics,
     replyTimeoutMs = 600_000,
@@ -155,6 +157,7 @@ export class WeixinRuntime {
     this.#state = state;
     this.#contextEnhancement = contextEnhancement;
     this.#accessPolicy = accessPolicy;
+    this.#sessionRouter = sessionRouter;
     this.#logger = logger;
     this.#diagnostics = diagnostics ?? createWeixinDiagnostics({ logger });
     this.#replyTimeoutMs = replyTimeoutMs;
@@ -202,6 +205,7 @@ export class WeixinRuntime {
         state: this.#state,
         contextEnhancement: this.#contextEnhancement,
         accessPolicy: this.#accessPolicy,
+        sessionRouter: this.#sessionRouter,
         status: this.#status,
         logger: this.#logger,
         replyTimeoutMs: this.#replyTimeoutMs,

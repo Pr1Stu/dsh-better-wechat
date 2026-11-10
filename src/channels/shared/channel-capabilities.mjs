@@ -14,17 +14,7 @@
 const NO_CAPABILITIES = Object.freeze({ buttons: false, fileSend: false });
 
 export const CHANNEL_CAPABILITIES = Object.freeze({
-  telegram: Object.freeze({ buttons: true, fileSend: true }),
-  slack: Object.freeze({ buttons: false, fileSend: true }),
-  discord: Object.freeze({ buttons: false, fileSend: true }),
-  // Feishu and DingTalk have their own native card/button systems that are not
-  // wired through the shared sendInteractionCard seam, and their file send is
-  // not exposed through the shared sendFile seam either — so neither is
-  // advertised here until it is actually wired.
-  feishu: Object.freeze({ buttons: false, fileSend: false }),
-  dingtalk: Object.freeze({ buttons: false, fileSend: false }),
-  // whatsapp, matrix, email, office, qq, wecom, wecom-app, weixin, imessage:
-  // no native message buttons and no document attachment path today.
+  weixin: NO_CAPABILITIES,
 });
 
 export function channelCapabilities(channelKey) {

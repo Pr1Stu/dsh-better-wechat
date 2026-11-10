@@ -169,7 +169,7 @@ export function createSessionSyncCoordinator({
         target.botId, target.targetId, sessionId, text,
         // Feishu renders its own card; preserve its plain fallback instead of
         // attempting another rich card.
-        { format: target.channel === 'feishu' ? 'plain' : format },
+        { format },
       )
     )));
     results.forEach((result, index) => {

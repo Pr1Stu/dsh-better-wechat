@@ -19,6 +19,25 @@ export function WeixinLogoGlyph({ size } = {}) {
   }));
 }
 
+
+export function SimWeixinLogoGlyph({ size } = {}) {
+  return h('svg', {
+    ...dimensions(size),
+    viewBox: '0 0 24 24',
+    focusable: 'false',
+    'aria-hidden': 'true',
+    'data-im-channel-logo': 'sim-weixin',
+  },
+  h('path', {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: '2',
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    d: 'M9 3h6M10 3v6l-5.2 8.5A2 2 0 0 0 6.5 21h11a2 2 0 0 0 1.7-3.5L14 9V3M8 15h8',
+  }));
+}
+
 export function FeishuLogoGlyph({ size } = {}) {
   return h('svg', {
     ...dimensions(size),
